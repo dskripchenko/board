@@ -981,6 +981,8 @@ const mini = computed(() => {
   const all = boardBounds(board.value)
   const r = viewRect.value
   const box = unionRects([all ?? r, r])!
+  // Not laid out yet (a hidden or zero-size container): nothing to draw.
+  if (!(box.w > 0 && box.h > 0)) return { objects: [], view: { x: 0, y: 0, w: 0, h: 0 }, scale: 1, ox: 0, oy: 0 }
   const scale = Math.min(MINI.w / box.w, MINI.h / box.h)
   const ox = (MINI.w - box.w * scale) / 2 - box.x * scale
   const oy = (MINI.h - box.h * scale) / 2 - box.y * scale
