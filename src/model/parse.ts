@@ -97,7 +97,11 @@ export function parseBoard(input: unknown): Board {
     missingZ.forEach((id, i) => ((objects[id] as { z: string }).z = keys[i]!))
   }
   const board: Board = { version: 1, objects }
-  if (isRecord(data.meta)) board.meta = data.meta as Board['meta']
+  if (isRecord(data.meta)) {
+    const meta = { ...data.meta } as Record<string, unknown>
+    if (meta.locked !== true) delete meta.locked
+    board.meta = meta as Board['meta']
+  }
   return board
 }
 

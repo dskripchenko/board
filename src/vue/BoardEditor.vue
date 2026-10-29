@@ -16,6 +16,7 @@ import { STICKY_COLORS } from '../model/types'
 import type { Op } from '../model/ops'
 import { parseBoard, emptyBoard } from '../model/parse'
 import { BoardDoc } from '../doc'
+import { isLocked, lockOp } from '../model/ops'
 import { SyncClient } from '../sync/client'
 import type { BoardProvider, ConnectionStatus, Presence } from '../sync/types'
 import {
@@ -47,8 +48,10 @@ const props = withDefaults(
     provider?: BoardProvider | null
     /** Who is editing: shown to the others next to the cursor. */
     user?: { id?: string; name?: string; color?: string } | null
+    /** May lock and unlock the board for everyone (default: anyone who can edit). */
+    lockable?: boolean
   }>(),
-  { modelValue: null, readonly: false, locale: undefined, labels: undefined, minimap: true, provider: null, user: null },
+  { modelValue: null, readonly: false, locale: undefined, labels: undefined, minimap: true, provider: null, user: null, lockable: true },
 )
 const emit = defineEmits<{
   'update:modelValue': [board: Board]
@@ -92,12 +95,27 @@ watch(
 
 function apply(ops: Op[], mergeKey?: string): void {
   if (props.readonly || !ready.value || ops.length === 0) return
+  // A locked board takes only changes of its settings (unlocking).
+  if (locked.value && ops.some((o) => o.k !== 'meta')) return
   doc.apply(ops, { mergeKey })
 }
 
 /** For hosts (the sync engine): apply remote operations. */
 function applyRemote(ops: Op[]): void {
   doc.applyRemote(ops)
+}
+
+/** The board is locked for everyone: viewing only, until it is unlocked. */
+const locked = computed(() => isLocked(board.value))
+/** No editing here: a read-only editor or a locked board. */
+const viewOnly = computed(() => props.readonly || locked.value)
+const canLock = computed(() => props.lockable && !props.readonly && ready.value)
+function toggleBoardLock(): void {
+  if (!canLock.value) return
+  editing.value = null
+  select([])
+  tool.value = 'select'
+  apply([lockOp(!locked.value, props.user?.name)])
 }
 
 // ---------- collaboration ----------
@@ -304,7 +322,7 @@ function onPointerDown(e: PointerEvent): void {
   const p = world(e)
   lastPointer = p
   ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-  if (e.button === 1 || tool.value === 'hand' || spaceDown.value || (props.readonly && e.button === 0)) {
+  if (e.button === 1 || tool.value === 'hand' || spaceDown.value || (viewOnly.value && e.button === 0)) {
     inter.value = { kind: 'pan', startX: e.clientX, startY: e.clientY, vx: view.value.x, vy: view.value.y }
     return
   }
@@ -570,7 +588,7 @@ function onWheel(e: WheelEvent): void {
 }
 
 function onDblClick(e: MouseEvent): void {
-  if (props.readonly) return
+  if (viewOnly.value) return
   const p = world(e)
   const hit = hitTest(board.value, p, 4 / view.value.k)
   if (hit) {
@@ -590,7 +608,7 @@ const textarea = ref<HTMLTextAreaElement | null>(null)
 
 function startEdit(id: string): void {
   const o = board.value.objects[id]
-  if (!o || o.locked || props.readonly || o.type === 'emoji') return
+  if (!o || o.locked || viewOnly.value || o.type === 'emoji') return
   const field = o.type === 'frame' ? 'title' : o.type === 'connector' ? 'label' : 'text'
   const value = ((o as unknown as Record<string, unknown>)[field] as string | undefined) ?? ''
   editing.value = { id, field, value }
@@ -728,7 +746,7 @@ function onCopy(e: ClipboardEvent, cut = false): void {
   if (cut) del()
 }
 function onPaste(e: ClipboardEvent): void {
-  if (editing.value || props.readonly) return
+  if (editing.value || viewOnly.value) return
   const text = e.clipboardData?.getData('text/plain') ?? ''
   let objects: BoardObject[] | null = null
   try {
@@ -788,7 +806,7 @@ function onKey(e: KeyboardEvent): void {
     shapeOpen.value = emojiOpen.value = exportOpen.value = false
     return
   }
-  if (props.readonly) return
+  if (viewOnly.value) return
   if (e.key === 'Delete' || e.key === 'Backspace') return void (e.preventDefault(), del())
   if (e.key === 'Enter' && single.value) return void (e.preventDefault(), startEdit(single.value.id))
   if (e.key.startsWith('Arrow') && selection.value.length) {
@@ -821,11 +839,11 @@ function boxHandles(r: Rect) {
 const handles = computed(() => {
   if (selectedObjects.value.length > 1) {
     const box = selectionBox.value
-    if (!box || anyLocked.value || props.readonly || inter.value?.kind === 'move' || editing.value) return []
+    if (!box || anyLocked.value || viewOnly.value || inter.value?.kind === 'move' || editing.value) return []
     return boxHandles(box)
   }
   const o = single.value
-  if (!o || o.locked || props.readonly || inter.value?.kind === 'move' || editing.value) return []
+  if (!o || o.locked || viewOnly.value || inter.value?.kind === 'move' || editing.value) return []
   if (o.type === 'connector') {
     const pts = connectorPoints(o, board.value)
     return [
@@ -921,7 +939,7 @@ const barEl = ref<HTMLElement | null>(null)
 const barSize = ref({ w: 0, h: 44 })
 const barPos = computed(() => {
   const box = selectionBox.value
-  if (!box || inter.value || editing.value || props.readonly) return null
+  if (!box || inter.value || editing.value || viewOnly.value) return null
   const top = toScreen(view.value, { x: box.x + box.w / 2, y: box.y })
   const bottom = toScreen(view.value, { x: box.x, y: box.y + box.h })
   const half = barSize.value.w / 2
@@ -1020,7 +1038,7 @@ function exportJson(): void {
   exportOpen.value = false
 }
 
-const emptyHint = computed(() => Object.keys(board.value.objects).length === 0 && !props.readonly)
+const emptyHint = computed(() => Object.keys(board.value.objects).length === 0 && !viewOnly.value)
 
 defineExpose({ doc, applyRemote, sync: () => sync, fit: fitAll, select, toPng, toSvg: svgString, zoomTo: vp.zoomTo })
 
@@ -1035,7 +1053,7 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
   <div
     ref="root"
     class="bd-root"
-    :class="{ 'bd-root--readonly': readonly, [`bd-tool-${tool}`]: true, 'bd-panning': spaceDown || inter?.kind === 'pan' }"
+    :class="{ 'bd-root--readonly': viewOnly, [`bd-tool-${tool}`]: true, 'bd-panning': spaceDown || inter?.kind === 'pan' }"
     tabindex="0"
     @keydown="onKey"
     @keyup="onKeyUp"
@@ -1262,7 +1280,23 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
 
     <!-- tools -->
     <div
-      v-if="!readonly"
+      v-if="locked"
+      class="bd-panel bd-locked"
+    >
+      <Lock :size="16" />
+      <span>{{ L.boardLocked }}<template v-if="board.meta?.lockedBy"> · {{ board.meta.lockedBy }}</template></span>
+      <UidButton
+        v-if="canLock"
+        size="sm"
+        variant="secondary"
+        class="bd-unlock"
+        @click="toggleBoardLock"
+      >
+        {{ L.unlockBoard }}
+      </UidButton>
+    </div>
+    <div
+      v-if="!viewOnly"
       class="bd-panel bd-tools"
     >
       <UidTooltip
@@ -1688,6 +1722,20 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
             :icon="MapIcon"
             :aria-label="L.minimap"
             @click="showMinimap = !showMinimap"
+          />
+        </UidTooltip>
+        <UidTooltip
+          v-if="canLock && !locked"
+          :content="L.lockBoard"
+          placement="top"
+        >
+          <UidButton
+            size="sm"
+            variant="ghost"
+            :icon="Lock"
+            :aria-label="L.lockBoard"
+            class="bd-lock-board"
+            @click="toggleBoardLock"
           />
         </UidTooltip>
         <UidTooltip

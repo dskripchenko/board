@@ -46,6 +46,9 @@ Rules:
 - Two people typing in the same sticky note at once: the later text wins
   (there is no character-level merge).
 
+- A locked board (`meta.locked`) takes only setting changes: the server
+  drops object changes until it is unlocked.
+
 **Presence** — cursor, selection, name, colour — goes separately, is not
 stored, at most 10 times a second, and fades after 30 seconds of silence.
 

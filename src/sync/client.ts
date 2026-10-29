@@ -27,6 +27,10 @@ export function compactOps(ops: Op[]): Op[] {
   for (const op of ops) {
     const i = last.get(op.id)
     const prev = i === undefined ? null : out[i]!
+    if (prev && op.k === 'meta' && prev.k === 'meta') {
+      out[i!] = { k: 'meta', id: op.id, props: { ...prev.props, ...op.props } }
+      continue
+    }
     if (prev && op.k === 'set' && prev.k === 'set') {
       out[i!] = { k: 'set', id: op.id, props: { ...prev.props, ...op.props } }
       continue

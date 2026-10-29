@@ -15,6 +15,7 @@
 | `minimap` | `boolean` | `true` | Minikarte beim Start anzeigen. |
 | `provider` | `BoardProvider \| null` | `null` | Zusammenarbeit in Echtzeit ([Zusammenarbeit](collaboration.md)). |
 | `user` | `{ id?, name?, color? }` | — | Wer bearbeitet: wird den anderen angezeigt. |
+| `lockable` | `boolean` | `true` | Darf das Board für alle sperren und entsperren. |
 
 ## Events
 
@@ -74,6 +75,16 @@
 | Mausrad oder Zwei-Finger-Scrollen | Verschieben |
 | Shift + 1 | An Bildschirm anpassen |
 | Escape | Auswahl aufheben, zurück zur Auswahl |
+
+## Board sperren
+
+Die Schloss-Schaltfläche (unten rechts) sperrt das Board für alle: Werkzeuge
+und Bearbeiten werden abgeschaltet, ein Banner zeigt, wer gesperrt hat, und
+nur **Entsperren** bleibt — für alle mit `lockable`. Die Sperre ist Teil des
+Boards (`meta.locked`), wird wie jede Änderung übertragen und lässt sich
+rückgängig machen; ein Server verwirft Objektänderungen, die während der
+Sperre eintreffen, sodass eine Verschiebung in diesem Moment bei allen gleich
+zurückgenommen wird.
 
 ## Export
 
