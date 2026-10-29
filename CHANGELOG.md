@@ -1,5 +1,11 @@
 # @dskripchenko/board
 
+## 0.2.1
+
+### Patch Changes
+
+- 81c89c9: The minimap draws nothing while the editor has no size yet (a hidden or not yet laid out container) instead of `NaN` coordinates that browsers report as errors.
+
 ## 0.2.0
 
 ### Minor Changes

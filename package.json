@@ -1,6 +1,6 @@
 {
   "name": "@dskripchenko/board",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An infinite whiteboard: shapes, stickies, frames, titles, connectors and emoji — a zero-dependency TypeScript core (model, geometry, undoable operations, real-time sync) and Vue components on @dskripchenko/ui",
   "keywords": [
     "whiteboard",
