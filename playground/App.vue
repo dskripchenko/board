@@ -6,7 +6,22 @@ import '../src/vue/board.css'
 import { sample } from './sample'
 
 const params = new URLSearchParams(location.search)
-const board = ref<Board>(params.has('empty') ? { version: 1, objects: {} } : sample)
+function stress(n: number): Board {
+  const objects: Board['objects'] = {}
+  const colors = ['yellow', 'orange', 'pink', 'violet', 'blue', 'cyan', 'green', 'gray'] as const
+  const cols = Math.ceil(Math.sqrt(n))
+  for (let i = 0; i < n; i++) {
+    const id = `o${i}`
+    const x = (i % cols) * 240
+    const y = Math.floor(i / cols) * 240
+    const z = `a${String(i).padStart(5, '0')}`
+    objects[id] = i % 3 === 0
+      ? { id, type: 'shape', kind: 'rounded', x, y, w: 200, h: 120, z, text: `Шаг ${i}` }
+      : { id, type: 'sticky', color: colors[i % 8]!, x, y, w: 200, h: 200, z, text: `Идея номер ${i}` }
+  }
+  return { version: 1, objects }
+}
+const board = ref<Board>(params.has('stress') ? stress(Number(params.get('stress')) || 5000) : params.has('empty') ? { version: 1, objects: {} } : sample)
 const changes = ref(0)
 </script>
 

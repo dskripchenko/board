@@ -18,7 +18,7 @@ import { parseBoard, emptyBoard } from '../model/parse'
 import { BoardDoc } from '../doc'
 import {
   align as alignCmd, bringToFront, createConnector, createObject, deleteObjects, distribute, duplicate, moveObjects, pasteObjects,
-  resizeObject, sendToBack, setProps, withChildren, wrapInFrame, type AlignEdge,
+  resizeObject, scaleObjects, sendToBack, setProps, withChildren, wrapInFrame, type AlignEdge,
 } from '../edit'
 import { bounds, boardBounds, center, connectorPoints, hitTest, objectsInRect, rotatePoint, shapePath, unionRects, visibleObjects } from '../geometry'
 import { boardToSvg, PALETTE, renderObject, STICKY_FILL, TEXT_STYLE, type SvgNode } from '../render'
@@ -195,6 +195,7 @@ type Interaction =
   | { kind: 'move'; start: Point; ids: string[]; applied: Point; moved: boolean; others: Rect[]; box: Rect }
   | { kind: 'marquee'; start: Point; cur: Point; additive: boolean; base: string[] }
   | { kind: 'resize'; id: string; handle: Handle; start: Point; rect: Rect; aspect: number }
+  | { kind: 'scale'; ids: string[]; handle: Handle; start: Point; box: Rect; board: Board; seq: number }
   | { kind: 'rotate'; id: string; c: Point }
   | { kind: 'create'; type: 'shape' | 'frame'; start: Point; cur: Point }
   | { kind: 'connect'; from: ConnectorEnd; start: Point; cur: Point }
@@ -236,6 +237,10 @@ function onPointerDown(e: PointerEvent): void {
   }
   if (e.button !== 0) return
   const handle = (e.target as Element).closest('[data-handle]')?.getAttribute('data-handle')
+  if (handle && !single.value && selectionBox.value) {
+    inter.value = { kind: 'scale', ids: [...selection.value], handle: handle as Handle, start: p, box: { ...selectionBox.value }, board: board.value, seq: ++dragSeq }
+    return
+  }
   if (handle && single.value) {
     const o = single.value
     if (handle === 'rotate') {
@@ -331,6 +336,11 @@ function onPointerMove(e: PointerEvent): void {
       const ops = resizeObject(board.value, it.id, next)
       if (o.type === 'text') ops.push({ k: 'set', id: o.id, props: { h: textHeight(o.text, next.w, o.variant) } })
       apply(ops, `resize-${it.id}`)
+      return
+    }
+    case 'scale': {
+      const next = resized(it.box, it.handle, p.x - it.start.x, p.y - it.start.y, e.shiftKey ? it.box.w / Math.max(it.box.h, 1) : 0)
+      apply(scaleObjects(it.board, it.ids, it.box, next), `scale-${it.seq}`)
       return
     }
     case 'rotate': {
@@ -670,7 +680,20 @@ function onKeyUp(e: KeyboardEvent): void {
 }
 
 // ---------- overlays (screen space) ----------
+function boxHandles(r: Rect) {
+  const pts: Record<string, Point> = {
+    nw: { x: r.x, y: r.y }, n: { x: r.x + r.w / 2, y: r.y }, ne: { x: r.x + r.w, y: r.y }, e: { x: r.x + r.w, y: r.y + r.h / 2 },
+    se: { x: r.x + r.w, y: r.y + r.h }, s: { x: r.x + r.w / 2, y: r.y + r.h }, sw: { x: r.x, y: r.y + r.h }, w: { x: r.x, y: r.y + r.h / 2 },
+  }
+  return Object.entries(pts).map(([id, p]) => ({ id, ...toScreen(view.value, p) }))
+}
+
 const handles = computed(() => {
+  if (selectedObjects.value.length > 1) {
+    const box = selectionBox.value
+    if (!box || anyLocked.value || props.readonly || inter.value?.kind === 'move' || editing.value) return []
+    return boxHandles(box)
+  }
   const o = single.value
   if (!o || o.locked || props.readonly || inter.value?.kind === 'move' || editing.value) return []
   if (o.type === 'connector') {
@@ -692,6 +715,13 @@ const handles = computed(() => {
     list.push({ id: 'rotate', ...toScreen(view.value, top) })
   }
   return list
+})
+
+const groupOutline = computed(() => {
+  const box = selectionBox.value
+  if (!box || selectedObjects.value.length < 2) return null
+  const a = toScreen(view.value, box)
+  return { x: a.x, y: a.y, w: box.w * view.value.k, h: box.h * view.value.k }
 })
 
 const outlines = computed(() =>
@@ -739,12 +769,29 @@ const guideLines = computed(() =>
   }),
 )
 
+const barEl = ref<HTMLElement | null>(null)
+const barSize = ref({ w: 0, h: 44 })
 const barPos = computed(() => {
   const box = selectionBox.value
   if (!box || inter.value || editing.value || props.readonly) return null
-  const s = toScreen(view.value, { x: box.x + box.w / 2, y: box.y })
-  return { left: `${Math.max(8, Math.min(vp.size.value.width - 8, s.x))}px`, top: `${Math.max(8, s.y - 56)}px` }
+  const top = toScreen(view.value, { x: box.x + box.w / 2, y: box.y })
+  const bottom = toScreen(view.value, { x: box.x, y: box.y + box.h })
+  const half = barSize.value.w / 2
+  const width = vp.size.value.width
+  const x = Math.max(8 + half, Math.min(width - 8 - half, top.x))
+  // Above the selection; below it when there is no room; never off screen.
+  let y = top.y - barSize.value.h - 12
+  if (y < 8) y = Math.min(bottom.y + 12, vp.size.value.height - barSize.value.h - 8)
+  return { left: `${x}px`, top: `${Math.max(8, y)}px` }
 })
+watch(
+  () => `${barPos.value === null}|${selection.value.join()}`,
+  () =>
+    nextTick(() => {
+      const el = barEl.value
+      if (el && (el.offsetWidth !== barSize.value.w || el.offsetHeight !== barSize.value.h)) barSize.value = { w: el.offsetWidth, h: el.offsetHeight }
+    }),
+)
 
 // ---------- minimap ----------
 const MINI = { w: 200, h: 140 }
@@ -875,6 +922,14 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
         />
       </g>
       <g class="bd-overlay">
+        <rect
+          v-if="groupOutline"
+          :x="groupOutline.x"
+          :y="groupOutline.y"
+          :width="groupOutline.w"
+          :height="groupOutline.h"
+          class="bd-group-outline"
+        />
         <path
           v-for="ol in outlines"
           :key="ol.id"
@@ -1049,6 +1104,7 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
     <!-- context bar -->
     <div
       v-if="barPos && selectedObjects.length"
+      ref="barEl"
       class="bd-panel bd-bar"
       :style="barPos"
       @pointerdown.stop

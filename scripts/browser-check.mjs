@@ -111,12 +111,70 @@ const png = await page.evaluate(async () => {
 })
 void png
 
+// Group resize: select two stickies, drag the south-east handle.
+await page.keyboard.press('Escape')
+const s1b = await page.locator('.bd-sticky').nth(0).boundingBox()
+const s2b = await page.locator('.bd-sticky').nth(1).boundingBox()
+await page.mouse.click(s1b.x + 10, s1b.y + 10)
+await page.keyboard.down('Shift')
+await page.mouse.click(s2b.x + 10, s2b.y + 10)
+await page.keyboard.up('Shift')
+const se = page.locator('.bd-handle--se')
+check('group selection shows box handles', (await page.locator('.bd-handle').count()) === 8)
+const hb = await se.boundingBox()
+await page.mouse.move(hb.x + 5, hb.y + 5)
+await page.mouse.down()
+await page.mouse.move(hb.x + 65, hb.y + 45, { steps: 6 })
+await page.mouse.up()
+const s1c = await page.locator('.bd-sticky').nth(0).boundingBox()
+check('group resize scales the objects', s1c.width > s1b.width + 5, `${Math.round(s1b.width)} → ${Math.round(s1c.width)}`)
+await page.keyboard.press('Control+z')
+
+// The context bar stays on screen for an object at the left edge.
+await page.keyboard.press('Escape')
+const bar = async () => (await page.locator('.bd-bar').boundingBox())
+await page.mouse.click(s1b.x + 10, s1b.y + 10)
+await page.mouse.down()
+await page.mouse.move(box.x + 30, s1b.y + 10, { steps: 6 })
+await page.mouse.up()
+const bb = await bar()
+check('context bar stays inside the canvas', bb && bb.x >= box.x && bb.x + bb.width <= box.x + box.width, bb ? `x=${Math.round(bb.x)}` : 'none')
+await page.keyboard.press('Control+z')
+
 // Dark theme.
 await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'))
 await page.waitForTimeout(200)
 await page.screenshot({ path: join(out, '3-dark.png') })
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
+
+// 5 000 objects: first paint and frame rate while panning.
+const stress = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const t0 = Date.now()
+await stress.goto(url + (url.includes('?') ? '&' : '?') + 'stress=5000')
+await stress.waitForSelector('.bd-obj')
+const firstPaint = Date.now() - t0
+await stress.keyboard.press('Control+=')
+for (let i = 0; i < 3; i++) await stress.keyboard.press('Control+=')
+await stress.waitForTimeout(500)
+const sbox = await stress.locator('.bd-canvas').boundingBox()
+await stress.mouse.move(sbox.x + 700, sbox.y + 450)
+const fps = await stress.evaluate(async () => {
+  let frames = 0
+  let run = true
+  const tick = () => { frames++; if (run) requestAnimationFrame(tick) }
+  requestAnimationFrame(tick)
+  const el = document.querySelector('.bd-canvas')
+  for (let i = 0; i < 60; i++) {
+    el.dispatchEvent(new WheelEvent('wheel', { deltaX: 30, deltaY: 20, bubbles: true, cancelable: true, clientX: 700, clientY: 450 }))
+    await new Promise((r) => setTimeout(r, 16))
+  }
+  run = false
+  return Math.round(frames / (60 * 16 / 1000))
+})
+check('5 000 objects: first paint under 5 s', firstPaint < 5000, `${firstPaint} ms`)
+check('5 000 objects: panning at 30+ fps when zoomed in', fps >= 30, `${fps} fps`)
+await stress.close()
 await browser.close()
 console.log(failures.length ? `${failures.length} failed` : 'all checks passed')
 process.exit(failures.length ? 1 : 0)

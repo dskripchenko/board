@@ -31,6 +31,7 @@
 .bd-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .bd-editing .bd-text { visibility: hidden; }
 .bd-overlay { pointer-events: none; }
+.bd-group-outline { fill: none; stroke: var(--bd-accent); stroke-width: 1; stroke-dasharray: 4 3; }
 .bd-outline { fill: none; stroke: var(--bd-accent); stroke-width: 1.5; }
 .bd-guide { stroke: #ec4899; stroke-width: 1; stroke-dasharray: 4 3; }
 .bd-marquee { fill: color-mix(in srgb, var(--bd-accent) 10%, transparent); stroke: var(--bd-accent); stroke-width: 1; }

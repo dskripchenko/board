@@ -203,6 +203,33 @@ export function wrapInFrame(board: Board, ids: Iterable<string>, title = ''): { 
   return { id, ops }
 }
 
+/**
+ * Scales a group from one box to another: positions and sizes of the objects
+ * (and of the contents of frames among them), free connector ends too.
+ */
+export function scaleObjects(board: Board, ids: Iterable<string>, from: Rect, to: Rect): Op[] {
+  const sx = to.w / Math.max(from.w, 1e-6)
+  const sy = to.h / Math.max(from.h, 1e-6)
+  const px = (x: number) => to.x + (x - from.x) * sx
+  const py = (y: number) => to.y + (y - from.y) * sy
+  const ops: Op[] = []
+  for (const id of withChildren(board, ids)) {
+    const o = board.objects[id]
+    if (!o || o.locked) continue
+    if (o.type === 'connector') {
+      const props: Record<string, unknown> = {}
+      if (!('id' in o.from)) props.from = { x: px(o.from.x), y: py(o.from.y) }
+      if (!('id' in o.to)) props.to = { x: px(o.to.x), y: py(o.to.y) }
+      if (Object.keys(props).length) ops.push({ k: 'set', id, props })
+      continue
+    }
+    const w = Math.max(8, o.w * sx)
+    const h = Math.max(8, o.type === 'emoji' ? w : o.h * sy)
+    ops.push({ k: 'set', id, props: { x: px(o.x), y: py(o.y), w, h } })
+  }
+  return ops
+}
+
 export type AlignEdge = 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom'
 
 /** Aligns objects to the edge of their joint bounds. */
