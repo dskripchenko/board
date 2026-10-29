@@ -104,3 +104,11 @@
 .bd-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--uid-color-text-muted, #6b7280); font-size: 15px; pointer-events: none; }
 .bd-delete { color: var(--uid-color-danger, #ef4444); }
 :is([data-theme='dark'], [data-color-mode='dark']) .bd-root { --bd-shadow: rgba(0, 0, 0, 0.4); }
+
+.bd-status { right: 12px; top: 12px; gap: 4px; padding: 4px 8px; }
+.bd-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+.bd-status--connecting .bd-status-dot { background: #f59e0b; }
+.bd-status--offline .bd-status-dot { background: #ef4444; }
+.bd-avatar { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; }
+.bd-cursor { transition: transform 0.1s linear; }
+.bd-cursor text { font-family: inherit; }

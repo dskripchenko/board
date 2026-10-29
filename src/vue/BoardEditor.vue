@@ -16,6 +16,8 @@ import { STICKY_COLORS } from '../model/types'
 import type { Op } from '../model/ops'
 import { parseBoard, emptyBoard } from '../model/parse'
 import { BoardDoc } from '../doc'
+import { SyncClient } from '../sync/client'
+import type { BoardProvider, ConnectionStatus, Presence } from '../sync/types'
 import {
   align as alignCmd, bringToFront, createConnector, createObject, deleteObjects, distribute, duplicate, moveObjects, pasteObjects,
   resizeObject, scaleObjects, sendToBack, setProps, withChildren, wrapInFrame, type AlignEdge,
@@ -40,8 +42,12 @@ const props = withDefaults(
     labels?: Partial<BoardLabels>
     /** Show the minimap initially. */
     minimap?: boolean
+    /** Real-time collaboration: the transport (MemoryHub, httpProvider…). */
+    provider?: BoardProvider | null
+    /** Who is editing: shown to the others next to the cursor. */
+    user?: { id?: string; name?: string; color?: string } | null
   }>(),
-  { modelValue: null, readonly: false, locale: undefined, labels: undefined, minimap: true },
+  { modelValue: null, readonly: false, locale: undefined, labels: undefined, minimap: true, provider: null, user: null },
 )
 const emit = defineEmits<{
   'update:modelValue': [board: Board]
@@ -84,7 +90,7 @@ watch(
 )
 
 function apply(ops: Op[], mergeKey?: string): void {
-  if (props.readonly || ops.length === 0) return
+  if (props.readonly || !ready.value || ops.length === 0) return
   doc.apply(ops, { mergeKey })
 }
 
@@ -92,6 +98,51 @@ function apply(ops: Op[], mergeKey?: string): void {
 function applyRemote(ops: Op[]): void {
   doc.applyRemote(ops)
 }
+
+// ---------- collaboration ----------
+const PRESENCE_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+let sync: SyncClient | null = null
+const status = ref<ConnectionStatus | null>(null)
+const ready = ref(!props.provider)
+const others = ref<Presence[]>([])
+const myColor = props.user?.color ?? PRESENCE_COLORS[Math.floor(Math.random() * PRESENCE_COLORS.length)]!
+let presenceTimer: ReturnType<typeof setTimeout> | undefined
+let presenceDue = false
+let lastPresence = 0
+
+function startSync(): void {
+  if (!props.provider) return
+  sync = new SyncClient(doc, props.provider, { user: props.user?.id ?? props.user?.name })
+  sync.ready.then(() => {
+    ready.value = true
+    sendPresence()
+    nextTick(() => fitAll(false))
+  })
+  props.provider.status?.on((s) => (status.value = s))
+  props.provider.presence?.on((all) => {
+    const now = Date.now()
+    others.value = all.filter((p) => p.client !== sync?.client && (!p.at || now - p.at < 30_000))
+  })
+}
+/** Sends cursor and selection, at most 10 times a second. */
+function sendPresence(): void {
+  if (!sync || !props.provider?.presence) return
+  const now = Date.now()
+  if (now - lastPresence < 100) {
+    if (!presenceDue) {
+      presenceDue = true
+      presenceTimer = setTimeout(() => {
+        presenceDue = false
+        sendPresence()
+      }, 100 - (now - lastPresence))
+    }
+    return
+  }
+  lastPresence = now
+  sync.sendPresence({ user: props.user?.id, name: props.user?.name, color: myColor, cursor: cursorWorld, selection: selection.value })
+}
+let cursorWorld: Point | null = null
+const heartbeat = setInterval(() => sendPresence(), 10_000)
 
 // ---------- view ----------
 const root = ref<HTMLElement | null>(null)
@@ -109,8 +160,12 @@ onMounted(() => {
   ro = new ResizeObserver(sync)
   ro.observe(el)
   fitAll(false)
+  startSync()
 })
 onBeforeUnmount(() => {
+  clearInterval(heartbeat)
+  clearTimeout(presenceTimer)
+  sync?.close()
   ro?.disconnect()
   off()
   vp.dispose()
@@ -147,7 +202,10 @@ const dotGap = computed(() => 24 * view.value.k)
 
 // ---------- selection ----------
 const selection = ref<string[]>([])
-watch(selection, (s) => emit('selection', s))
+watch(selection, (s) => {
+  emit('selection', s)
+  sendPresence()
+})
 const selectedObjects = computed(() => selection.value.map((id) => board.value.objects[id]).filter((o): o is BoardObject => !!o))
 const selectionBox = computed(() => unionRects(selectedObjects.value.map((o) => bounds(o, board.value))))
 const single = computed(() => (selectedObjects.value.length === 1 ? selectedObjects.value[0]! : null))
@@ -299,6 +357,8 @@ function onPointerDown(e: PointerEvent): void {
 function onPointerMove(e: PointerEvent): void {
   const p = world(e)
   lastPointer = p
+  cursorWorld = p
+  sendPresence()
   const it = inter.value
   if (!it) return
   switch (it.kind) {
@@ -793,6 +853,22 @@ watch(
     }),
 )
 
+const remote = computed(() =>
+  others.value.map((p, i) => {
+    const color = p.color ?? PRESENCE_COLORS[i % PRESENCE_COLORS.length]!
+    const cursor = p.cursor ? toScreen(view.value, p.cursor) : null
+    const boxes = (p.selection ?? [])
+      .map((id) => board.value.objects[id])
+      .filter((o): o is BoardObject => !!o)
+      .map((o) => {
+        const r = bounds(o, board.value)
+        const a = toScreen(view.value, r)
+        return { id: o.id, x: a.x - 3, y: a.y - 3, w: r.w * view.value.k + 6, h: r.h * view.value.k + 6 }
+      })
+    return { client: p.client, name: p.name ?? p.user ?? '', color, cursor, boxes }
+  }),
+)
+
 // ---------- minimap ----------
 const MINI = { w: 200, h: 140 }
 const mini = computed(() => {
@@ -858,7 +934,7 @@ function exportJson(): void {
 
 const emptyHint = computed(() => Object.keys(board.value.objects).length === 0 && !props.readonly)
 
-defineExpose({ doc, applyRemote, fit: fitAll, select, toPng, toSvg: svgString, zoomTo: vp.zoomTo })
+defineExpose({ doc, applyRemote, sync: () => sync, fit: fitAll, select, toPng, toSvg: svgString, zoomTo: vp.zoomTo })
 
 // Swatches.
 const stickySwatches = STICKY_COLORS.map((c) => ({ id: c as StickyColor, color: STICKY_FILL[c] }))
@@ -970,6 +1046,53 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
             />
           </template>
         </template>
+        <g
+          v-for="r in remote"
+          :key="r.client"
+          class="bd-remote"
+        >
+          <rect
+            v-for="bx in r.boxes"
+            :key="bx.id"
+            :x="bx.x"
+            :y="bx.y"
+            :width="bx.w"
+            :height="bx.h"
+            rx="4"
+            fill="none"
+            :stroke="r.color"
+            stroke-width="2"
+          />
+          <g
+            v-if="r.cursor"
+            :transform="`translate(${r.cursor.x} ${r.cursor.y})`"
+            class="bd-cursor"
+          >
+            <path
+              d="M0 0 L0 16 L4.5 12 L7.5 19 L10 18 L7 11 L13 11 Z"
+              :fill="r.color"
+              stroke="#fff"
+              stroke-width="1.2"
+            />
+            <g
+              v-if="r.name"
+              transform="translate(14 18)"
+            >
+              <rect
+                :width="r.name.length * 7 + 12"
+                height="20"
+                rx="6"
+                :fill="r.color"
+              />
+              <text
+                x="6"
+                y="14"
+                font-size="12"
+                fill="#fff"
+              >{{ r.name }}</text>
+            </g>
+          </g>
+        </g>
         <template
           v-for="hd in handles"
           :key="hd.id"
@@ -1008,7 +1131,21 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
     />
 
     <div
-      v-if="emptyHint"
+      v-if="provider"
+      class="bd-panel bd-status"
+      :class="`bd-status--${ready ? status ?? 'online' : 'connecting'}`"
+    >
+      <span class="bd-status-dot" />
+      <span
+        v-for="o in others.slice(0, 6)"
+        :key="o.client"
+        class="bd-avatar"
+        :style="{ background: o.color }"
+        :title="o.name ?? o.user"
+      >{{ (o.name ?? o.user ?? '?').slice(0, 1).toUpperCase() }}</span>
+    </div>
+    <div
+      v-if="emptyHint && ready"
       class="bd-hint"
     >
       {{ L.emptyHint }}

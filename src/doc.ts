@@ -55,6 +55,15 @@ export class BoardDoc {
     return inverse
   }
 
+  /**
+   * The sync engine's view changed under us (remote batches rebased with our
+   * pending ones): take the new board as is, keep the undo history.
+   */
+  replace(board: Board, ops: Op[]): void {
+    this.board = board
+    this.emit(ops, 'remote')
+  }
+
   /** Remote changes: applied, not undoable. */
   applyRemote(ops: Op[]): void {
     const { board } = applyOps(this.board, ops)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Board } from '../src'
+import { MemoryHub, type Board } from '../src'
 import BoardEditor from '../src/vue/BoardEditor.vue'
 import '../src/vue/board.css'
 import { sample } from './sample'
@@ -23,6 +23,9 @@ function stress(n: number): Board {
 }
 const board = ref<Board>(params.has('stress') ? stress(Number(params.get('stress')) || 5000) : params.has('empty') ? { version: 1, objects: {} } : sample)
 const changes = ref(0)
+const collab = params.has('collab')
+const hub = collab ? new MemoryHub({ board: sample, seq: 0 }, () => 60 + Math.random() * 60) : null
+const users = [{ name: 'Анна', color: '#ec4899' }, { name: 'Борис', color: '#3b82f6' }]
 </script>
 
 <template>
@@ -30,7 +33,23 @@ const changes = ref(0)
     <div style="padding: 6px 12px; font-size: 13px; border-bottom: 1px solid var(--uid-color-border)">
       @dskripchenko/board · объектов: {{ Object.keys(board.objects).length }} · изменений: {{ changes }}
     </div>
-    <div style="flex: 1; min-height: 0">
+    <div
+      v-if="hub"
+      style="flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--uid-color-border)"
+    >
+      <BoardEditor
+        v-for="u in users"
+        :key="u.name"
+        :provider="hub.provider()"
+        :user="u"
+        :class="`collab-${u.name}`"
+        :minimap="false"
+      />
+    </div>
+    <div
+      v-else
+      style="flex: 1; min-height: 0"
+    >
       <BoardEditor
         v-model="board"
         :readonly="params.has('readonly')"
