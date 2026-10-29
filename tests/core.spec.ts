@@ -237,3 +237,32 @@ describe('BoardDoc', () => {
     expect(doc.canUndo).toBe(false)
   })
 })
+
+describe('render', () => {
+  it('renders every object type and exports a standalone SVG', async () => {
+    const { boardToSvg, parseBoard: parse, textOn } = await import('../src')
+    const board = parse({ objects: {
+      a: { type: 'sticky', x: 0, y: 0, w: 200, h: 200, text: 'Привет' },
+      b: { type: 'shape', kind: 'star', x: 300, y: 0, w: 100, h: 100, text: 'S', fill: '#fde68a' },
+      c: { type: 'connector', from: { id: 'a' }, to: { id: 'b' }, route: 'curve', label: 'x' },
+      d: { type: 'text', variant: 'title', text: 'T', x: 0, y: 300, w: 200, h: 40 },
+      e: { type: 'emoji', char: '🎉', x: 0, y: 400, w: 64, h: 64 },
+      f: { type: 'frame', title: 'F', x: -50, y: -50, w: 600, h: 600 },
+    } })
+    const { svg, width } = boardToSvg(board)
+    expect(svg).toMatch(/^<svg xmlns/)
+    for (const t of ['bd-sticky', 'bd-shape', 'bd-connector', 'bd-text', 'bd-emoji', 'bd-frame']) expect(svg).toContain(t)
+    expect(svg).toContain('Привет')
+    expect(width).toBeGreaterThan(600)
+    expect(textOn('#fde68a', 'var(--x)')).toBe('#1f2937')
+    expect(textOn('#1f2937', 'var(--x)')).toBe('#ffffff')
+    expect(textOn(undefined, 'var(--x)')).toBe('var(--x)')
+  })
+
+  it('fits sticky text without splitting words', async () => {
+    const { fitFontSize, wrapLines, approximateMeasurer: m } = await import('../src')
+    const size = fitFontSize('Долгие согласования ТЗ с рисками', 176, 176, m)
+    const lines = wrapLines('Долгие согласования ТЗ с рисками', 176, { size }, m)
+    expect(lines.join(' ')).toBe('Долгие согласования ТЗ с рисками')
+  })
+})
