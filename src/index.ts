@@ -1,7 +1,7 @@
 export type * from './model/types'
 export { STICKY_COLORS } from './model/types'
 export { parseBoard, stringifyBoard, emptyBoard, BoardError } from './model/parse'
-export { applyOps, type Op } from './model/ops'
+export { applyOps, isLocked, lockOp, META, type Op } from './model/ops'
 export { keyBetween, keysBetween, compareZ } from './model/zindex'
 export { newId } from './model/ids'
 export * from './geometry'

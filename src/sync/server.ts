@@ -50,9 +50,12 @@ export class BoardServer {
     if (batch.ops.length > this.limits.maxOps) throw new Error(`A batch has more than ${this.limits.maxOps} operations`)
     const creates = batch.ops.filter((o) => o.k === 'create').length
     if (creates && Object.keys(this.board.objects).length + creates > this.limits.maxObjects) throw new Error(`A board holds at most ${this.limits.maxObjects} objects`)
+    // A locked board takes only changes of its settings (unlocking among them):
+    // object changes are dropped here, so every client rolls them back alike.
+    const ops = this.board.meta?.locked === true ? batch.ops.filter((o) => o.k === 'meta') : batch.ops
     const seq = ++this.seq
-    const ordered: SeqBatch = { ...batch, seq }
-    this.board = applyOps(this.board, batch.ops).board
+    const ordered: SeqBatch = { ...batch, ops, seq }
+    this.board = applyOps(this.board, ops).board
     this.log.push(ordered)
     if (this.log.length > this.keep) this.log.splice(0, this.log.length - this.keep)
     this.seen.set(batch.client, { cseq: batch.cseq, seq })

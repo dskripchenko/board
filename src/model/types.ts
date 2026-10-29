@@ -8,6 +8,10 @@ export interface Board {
 export interface BoardMeta {
   title?: string
   background?: 'dots' | 'grid' | 'none'
+  /** Nobody edits a locked board until it is unlocked (the server drops other changes). */
+  locked?: boolean
+  /** Who locked it (a name, for the banner). */
+  lockedBy?: string
 }
 
 export type ObjectType = 'shape' | 'sticky' | 'text' | 'frame' | 'connector' | 'emoji' | 'ink'

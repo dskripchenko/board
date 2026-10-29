@@ -204,6 +204,18 @@ const bb = await bar()
 check('context bar stays inside the canvas', bb && bb.x >= box.x && bb.x + bb.width <= box.x + box.width, bb ? `x=${Math.round(bb.x)}` : 'none')
 await page.keyboard.press('Control+z')
 
+// Board lock: everyone views only until unlocked.
+await page.keyboard.press('Escape')
+await page.locator('.bd-lock-board').click()
+await page.waitForTimeout(200)
+check('lock: the banner shows and the tools hide', (await page.locator('.bd-locked').count()) === 1 && (await page.locator('.bd-tools').count()) === 0)
+const nLocked = await count()
+await page.mouse.dblclick(at(936, 700).x, at(936, 700).y)
+check('lock: a double click adds nothing', (await count()) === nLocked && (await page.locator('.bd-text-editor').count()) === 0)
+await page.locator('.bd-unlock').click()
+await page.waitForTimeout(200)
+check('unlock: the tools come back', (await page.locator('.bd-locked').count()) === 0 && (await page.locator('.bd-tools').count()) === 1)
+
 // Dark theme.
 await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'))
 await page.waitForTimeout(200)

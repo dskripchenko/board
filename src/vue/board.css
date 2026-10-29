@@ -121,3 +121,4 @@
 .bd-live-stroke { pointer-events: none; }
 .bd-avatar--me { box-shadow: 0 0 0 2px var(--bd-surface), 0 0 0 3.5px currentColor; color: #fff; }
 .bd-avatar-sep { width: 1px; height: 16px; margin: 0 2px; background: var(--uid-color-border, #e5e7eb); }
+.bd-locked { left: 50%; top: 12px; transform: translateX(-50%); gap: 8px; padding: 6px 8px 6px 12px; font-size: 13px; color: var(--bd-text); }

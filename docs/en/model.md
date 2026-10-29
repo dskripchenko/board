@@ -7,7 +7,7 @@ writes exactly this shape.
 interface Board {
   version: 1
   objects: Record<string, BoardObject> // id → object
-  meta?: { title?: string; background?: 'dots' | 'grid' | 'none' }
+  meta?: { title?: string; background?: 'dots' | 'grid' | 'none'; locked?: boolean; lockedBy?: string }
 }
 ```
 
@@ -63,6 +63,7 @@ type Op =
   | { k: 'create'; id: string; obj: BoardObject }
   | { k: 'set'; id: string; props: Record<string, unknown> } // null removes a property
   | { k: 'delete'; id: string }
+  | { k: 'meta'; id: '$meta'; props: Record<string, unknown> } // board settings: lockOp(true | false, by?)
 
 const { board: next, inverse } = applyOps(board, ops)
 ```

@@ -15,6 +15,7 @@
 | `minimap` | `boolean` | `true` | Show the minimap at start. |
 | `provider` | `BoardProvider \| null` | `null` | Real-time collaboration ([Collaboration](collaboration.md)). |
 | `user` | `{ id?, name?, color? }` | — | Who edits: shown to the others. |
+| `lockable` | `boolean` | `true` | May lock and unlock the board for everyone. |
 
 ## Events
 
@@ -72,6 +73,15 @@ Through a template ref: `fit()`, `select(ids)`, `zoomTo(k)`, `toPng(scale?)`
 | Wheel or two-finger scroll | Pan |
 | Shift + 1 | Fit to screen |
 | Escape | Clear the selection, back to Select |
+
+## Locking the board
+
+The lock button (bottom right) locks the board for everyone: tools and
+editing turn off, a banner shows who locked it, and only **Unlock** remains —
+for those with `lockable`. The lock is part of the board (`meta.locked`),
+travels like any change and is undoable; a server drops object changes that
+arrive while the board is locked, so a move made at that moment is rolled
+back for everyone alike.
 
 ## Export
 

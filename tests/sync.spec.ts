@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BoardDoc, BoardServer, SyncClient, bringToFront, createObject, deleteObjects, moveObjects, setProps,
+  BoardDoc, BoardServer, SyncClient, bringToFront, lockOp, isLocked, createObject, deleteObjects, moveObjects, setProps,
   type Batch, type BoardProvider, type SeqBatch, type Snapshot,
 } from '../src'
 
@@ -39,6 +39,15 @@ class SteppedNet {
         return () => this.listeners.delete(i)
       },
     }
+  }
+
+  /** Delivers the next batch from one client's up queue to the server. */
+  stepUp(i: number): void {
+    const b = this.up.get(i)!.shift()
+    if (!b) return
+    const { batch, fresh } = this.server.receive(b)
+    if (fresh) for (const q of this.down.values()) q.push(batch)
+    else this.down.get(i)!.push(batch)
   }
 
   busy(): boolean {
@@ -86,7 +95,8 @@ async function scenario(seed: number, clients = 4, actions = 60, throttled = fal
     else if (r < 0.6) doc.apply(setProps(doc.board, [id], { text: `t${a}`, color: pick(['pink', 'blue', 'green']) }))
     else if (r < 0.7) doc.apply(deleteObjects(doc.board, [id]))
     else if (r < 0.8) doc.apply(bringToFront(doc.board, [id]))
-    else if (r < 0.9) doc.undo()
+    else if (r < 0.86) doc.undo()
+    else if (r < 0.9) doc.apply([lockOp(random() < 0.5)])
     else doc.redo()
     // Throttled: the flush window closes at random moments.
     if (throttled && random() < 0.4) syncs[Math.floor(random() * clients)]!.flush()
@@ -245,5 +255,42 @@ describe('sync: throttled sending', () => {
       { k: 'create', id: 'n', obj: { ...obj, x: 5 } },
       { k: 'delete', id: 'd' },
     ])
+  })
+})
+
+describe('sync: board lock', () => {
+  it('the server drops object changes on a locked board; everyone rolls them back alike', async () => {
+    const net = new SteppedNet(rng(5))
+    const a = new BoardDoc(), b = new BoardDoc()
+    const sa = new SyncClient(a, net.provider(0), { client: 'a', flushInterval: 0 })
+    const sb = new SyncClient(b, net.provider(1), { client: 'b', flushInterval: 0 })
+    await Promise.all([sa.ready, sb.ready])
+    const { id, ops } = createObject(a.board, 'sticky', { x: 0, y: 0 })
+    a.apply(ops)
+    while (net.busy()) net.step()
+    // b locks; a, not knowing yet, moves the sticky.
+    b.apply([lockOp(true, 'Boris')])
+    a.apply(moveObjects(a.board, [id], 100, 0))
+    expect(a.board.objects[id]!.x).toBe(b.board.objects[id]!.x + 100)
+    const x0 = b.board.objects[id]!.x
+    // The lock reaches the server first: the move is dropped there.
+    net.stepUp(1)
+    net.stepUp(0)
+    while (net.busy()) net.step()
+    expect(a.board.objects[id]!.x).toBe(x0)
+    expect(isLocked(a.board) && isLocked(b.board)).toBe(true)
+    expect(a.board).toEqual(b.board)
+    expect(a.board.meta?.lockedBy).toBe('Boris')
+    // Unlocking works on a locked board, and is undoable.
+    a.apply([lockOp(false)])
+    while (net.busy()) net.step()
+    expect(isLocked(b.board)).toBe(false)
+  })
+
+  it('lock and unlock are operations with an exact inverse', async () => {
+    const { applyOps: run2, emptyBoard: empty } = await import('../src')
+    const locked = run2(empty(), [lockOp(true, 'Anna')])
+    expect(locked.board.meta).toEqual({ locked: true, lockedBy: 'Anna' })
+    expect(run2(locked.board, locked.inverse).board).toEqual(empty())
   })
 })

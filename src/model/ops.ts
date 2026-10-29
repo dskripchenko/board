@@ -8,6 +8,10 @@ export type Op =
   | { k: 'create'; id: string; obj: BoardObject }
   | { k: 'set'; id: string; props: Record<string, unknown> }
   | { k: 'delete'; id: string }
+  /** Board settings (`meta`): title, lock… `id` is always META. */
+  | { k: 'meta'; id: typeof META; props: Record<string, unknown> }
+
+export const META = '$meta' as const
 
 const IMMUTABLE = new Set(['id', 'type'])
 
@@ -18,8 +22,26 @@ const IMMUTABLE = new Set(['id', 'type'])
  */
 export function applyOps(board: Board, ops: readonly Op[]): { board: Board; inverse: Op[] } {
   const objects = { ...board.objects }
+  let meta = board.meta
   const inverse: Op[] = []
   for (const op of ops) {
+    if (op.k === 'meta') {
+      const before: Record<string, unknown> = {}
+      const next: Record<string, unknown> = { ...(meta ?? {}) }
+      let changed = false
+      for (const [key, value] of Object.entries(op.props)) {
+        const prev = next[key]
+        if (sameValue(prev, value === null ? undefined : value)) continue
+        before[key] = prev === undefined ? null : prev
+        if (value === null || value === undefined) delete next[key]
+        else next[key] = value
+        changed = true
+      }
+      if (!changed) continue
+      meta = Object.keys(next).length ? (next as Board['meta']) : undefined
+      inverse.push({ k: 'meta', id: META, props: before })
+      continue
+    }
     const current = objects[op.id]
     if (op.k === 'create') {
       if (current) continue
@@ -49,7 +71,20 @@ export function applyOps(board: Board, ops: readonly Op[]): { board: Board; inve
     }
   }
   inverse.reverse()
-  return { board: { ...board, objects }, inverse }
+  const next: Board = { ...board, objects }
+  if (meta) next.meta = meta
+  else delete next.meta
+  return { board: next, inverse }
+}
+
+/** Whether a board is locked for editing. */
+export function isLocked(board: Board): boolean {
+  return board.meta?.locked === true
+}
+
+/** The operation that locks (or unlocks) a board. */
+export function lockOp(locked: boolean, by?: string): Op {
+  return { k: 'meta', id: META, props: locked ? { locked: true, lockedBy: by ?? null } : { locked: null, lockedBy: null } }
 }
 
 function sameValue(a: unknown, b: unknown): boolean {
