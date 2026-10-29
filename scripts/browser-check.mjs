@@ -43,6 +43,25 @@ await page.keyboard.press('Escape')
 check('double click adds a sticky with text', (await count()) === n0 + 1)
 check('the sticky shows its text', await page.locator('.bd-sticky text', { hasText: 'Новый' }).count() > 0)
 
+// Text tool: a click places a text and opens it for typing.
+await page.keyboard.press('t')
+await page.mouse.click(at(700, 700).x, at(700, 700).y)
+await page.waitForTimeout(200)
+check('text tool: a click opens the text editor', (await page.locator('.bd-text-editor').count()) === 1)
+await page.keyboard.type('Заметка')
+await page.keyboard.press('Escape')
+check('text tool: the text stays on the board', (await page.locator('.bd-text text', { hasText: 'Заметка' }).count()) === 1)
+await page.keyboard.press('Control+z')
+await page.keyboard.press('Control+z')
+
+// Sticky tool: a click places a sticky ready for typing.
+await page.keyboard.press('n')
+await page.mouse.click(at(560, 700).x, at(560, 700).y)
+await page.waitForTimeout(200)
+check('sticky tool: a click opens the sticky for typing', (await page.locator('.bd-text-editor').count()) === 1)
+await page.keyboard.press('Escape')
+await page.keyboard.press('Control+z')
+
 // Shape tool: drag a shape.
 await page.keyboard.press('s')
 await page.mouse.move(at(1000, 560).x, at(1000, 560).y)

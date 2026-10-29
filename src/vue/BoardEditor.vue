@@ -321,7 +321,10 @@ function onPointerDown(e: PointerEvent): void {
       const { id, ops } = createObject(board.value, type, p, extra)
       apply(ops)
       select([id])
-      if (type !== 'emoji') nextTick(() => startEdit(id))
+      // The browser moves focus to the canvas after pointerdown: open the editor
+      // once the click is over, or it loses focus at once (and an empty text is dropped).
+      e.preventDefault()
+      if (type !== 'emoji') setTimeout(() => startEdit(id), 0)
       tool.value = 'select'
       emojiOpen.value = false
       return
