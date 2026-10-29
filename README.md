@@ -1,5 +1,8 @@
 # @dskripchenko/board
 
+[![CI](https://github.com/dskripchenko/board/actions/workflows/ci.yml/badge.svg)](https://github.com/dskripchenko/board/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@dskripchenko/board)](https://www.npmjs.com/package/@dskripchenko/board)
+
 An infinite whiteboard for Vue 3: shapes, sticky notes, frames, titles and
 text, connectors and emoji — with a zero-dependency TypeScript core you can
 use without Vue (model, geometry, undoable operations, SVG export).
@@ -8,7 +11,7 @@ use without Vue (model, geometry, undoable operations, SVG export).
   parallelogram, hexagon, star), sticky notes in eight colours with
   auto-fitting text, titles and text, frames that carry their contents,
   connectors (straight, elbow, curve; arrows, labels, dashed) attached to
-  objects, emoji.
+  objects, emoji, pen and marker strokes.
 - **Editing:** pan and zoom, marquee and shift selection, move with snapping
   guides, resize and rotate (one object or a group), in-place text editing,
   align and distribute, frame a selection, stacking order, duplicate,
@@ -18,9 +21,19 @@ use without Vue (model, geometry, undoable operations, SVG export).
 - **Export:** PNG, SVG and JSON — the export uses the same renderer as the
   screen.
 - **Fast:** only what is on screen is drawn; 5 000 objects pan at 60 fps.
-- **Built for real-time collaboration:** every change is a batch of
-  per-object operations with an exact inverse — the unit the sync protocol
-  sends (see the roadmap).
+- **Real-time collaboration:** several people edit at once — changes,
+  cursors and selections travel live; a server orders the changes and every
+  client converges to the same board. Any transport: HTTP long polling out of
+  the box, WebSockets in a few lines.
+
+## Documentation
+
+| | English | Русский | Deutsch | 中文 |
+|---|---|---|---|---|
+| Getting started | [en](docs/en/getting-started.md) | [ru](docs/ru/getting-started.md) | [de](docs/de/getting-started.md) | [zh](docs/zh/getting-started.md) |
+| Model | [en](docs/en/model.md) | [ru](docs/ru/model.md) | [de](docs/de/model.md) | [zh](docs/zh/model.md) |
+| Editor | [en](docs/en/editor.md) | [ru](docs/ru/editor.md) | [de](docs/de/editor.md) | [zh](docs/zh/editor.md) |
+| Collaboration | [en](docs/en/collaboration.md) | [ru](docs/ru/collaboration.md) | [de](docs/de/collaboration.md) | [zh](docs/zh/collaboration.md) |
 
 ## Install
 
@@ -57,6 +70,8 @@ const board = ref<Board>({ version: 1, objects: {} })
 Events: `update:modelValue`, `change` (`{ board, ops, origin }`),
 `selection` (ids). Exposed: `applyRemote(ops)`, `fit()`, `select(ids)`,
 `toPng()`, `toSvg()`, `zoomTo(k)`. `BoardView` is the read-only editor.
+Props `provider` and `user` make it collaborative — see
+[Collaboration](docs/en/collaboration.md).
 
 ## Core
 
@@ -74,7 +89,7 @@ const { svg } = boardToSvg(board)
 
 | Keys | |
 |---|---|
-| V, H, N, S, T, F, L, E | Select, hand, sticky, shape, text, frame, connector, emoji |
+| V, H, N, S, T, F, L, E, P, M, X | Select, hand, sticky, shape, text, frame, connector, emoji, pen, marker, eraser |
 | Double click | New sticky; on an object — edit its text |
 | Space + drag, wheel | Pan; Ctrl/⌘ + wheel or pinch — zoom |
 | Shift + 1 | Fit to screen |
@@ -86,10 +101,9 @@ const { svg } = boardToSvg(board)
 
 ## Roadmap
 
-1. Editor (this release).
-2. Real-time collaboration: server-ordered operation batches, per-property
-   last-writer-wins, presence (cursors, selections).
-3. `<dsk-board>` in [@dskripchenko/embed](https://github.com/dskripchenko/embed).
+- `<dsk-board>` in [@dskripchenko/embed](https://github.com/dskripchenko/embed).
+- A board macro for Confluence Data Center.
+- Erasing part of a stroke; live strokes of others while they draw.
 
 ## License
 

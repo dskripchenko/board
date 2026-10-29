@@ -1,13 +1,24 @@
 // Drives the playground in Chromium: renders the sample, then creates,
 // moves, edits, connects, undoes and exports; saves screenshots.
-//   node scripts/browser-check.mjs [url]     (playground on :5330)
+//   node scripts/browser-check.mjs [url]     (starts the playground itself without a url)
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const require = createRequire(process.env.PLAYWRIGHT_FROM ?? import.meta.url)
 const { chromium } = require('playwright')
-const url = process.argv[2] ?? 'http://localhost:5330/'
+
+// The playground on a free port, unless a URL is given.
+let server = null
+let url = process.argv[2]
+if (!url) {
+  const { createServer } = await import('vite')
+  const root = join(import.meta.dirname, '..')
+  const port = 5331
+  server = await createServer({ configFile: join(root, 'playground/vite.config.ts'), server: { host: '127.0.0.1', port, strictPort: true }, logLevel: 'warn' })
+  await server.listen()
+  url = `http://127.0.0.1:${port}/`
+}
 const out = join(import.meta.dirname, '..', 'tests', 'browser', 'output')
 mkdirSync(out, { recursive: true })
 
@@ -261,5 +272,6 @@ check('5 000 objects: first paint under 5 s', firstPaint < 5000, `${firstPaint} 
 check('5 000 objects: panning at 30+ fps when zoomed in', fps >= 30, `${fps} fps`)
 await stress.close()
 await browser.close()
+await server?.close()
 console.log(failures.length ? `${failures.length} failed` : 'all checks passed')
 process.exit(failures.length ? 1 : 0)
