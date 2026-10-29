@@ -16,6 +16,4 @@ The first release.
   English.
 - Real-time collaboration: server-ordered batches, a rebasing client,
   presence (cursors, selections, avatars), `MemoryHub` and `httpProvider`,
-  and `BoardServer` as the reference server logic. Local changes go out at
-  most every 80 ms, merged per object, so a drag sends a few intermediate
-  positions rather than every pointer move.
+  and `BoardServer` as the reference server logic.
