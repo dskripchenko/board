@@ -1,7 +1,13 @@
+import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import dts from 'vite-plugin-dts'
+
+// The icons are bundled (no `lucide-vue-next` or `@dskripchenko/ui/icons` at run
+// time — embed's CDN import map has neither); their license goes with them.
+const lucideLicense = readFileSync(resolve(import.meta.dirname, 'node_modules/lucide-vue-next/LICENSE'), 'utf8').trim()
+const lucideBanner = `/*! Includes icons from lucide-vue-next (https://lucide.dev)\n${lucideLicense.replace(/\*\//g, '* /')}\n*/`
 
 export default defineConfig({
   plugins: [
@@ -22,8 +28,11 @@ export default defineConfig({
       cssFileName: 'style',
     },
     rollupOptions: {
-      external: ['vue', /^@dskripchenko\/ui($|\/)/],
-      output: { manualChunks: (id) => (id.includes('/src/') && !id.includes('/src/vue/') ? 'core' : undefined) },
+      external: ['vue', '@dskripchenko/ui'],
+      output: {
+        manualChunks: (id) => (id.includes('/src/') && !id.includes('/src/vue/') ? 'core' : undefined),
+        postBanner: (chunk) => (chunk.isEntry && chunk.name === 'vue' ? lucideBanner : ''),
+      },
     },
     minify: false,
     sourcemap: true,

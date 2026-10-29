@@ -10,7 +10,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDownToLine, ArrowUpToLine, Circle, Copy, Diamond, Download, Eraser, Frame, Hand, Hexagon, Highlighter, Lock, LockOpen, Map as MapIcon, Pencil,
   Maximize, Minus, MousePointer2, Plus, Redo2, Smile, Spline, Square, Star, StickyNote, Trash2, Triangle, Type, Undo2,
-} from '@dskripchenko/ui/icons'
+} from 'lucide-vue-next'
 import type { Board, BoardObject, ConnectorEnd, ConnectorObject, Point, Rect, ShapeKind, StickyColor } from '../model/types'
 import { STICKY_COLORS } from '../model/types'
 import type { Op } from '../model/ops'
