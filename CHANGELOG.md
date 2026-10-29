@@ -1,5 +1,11 @@
 # @dskripchenko/board
 
+## 0.1.2
+
+### Patch Changes
+
+- 14a3792: The Vue entry bundles its icons (with the Lucide license): it imports only `vue` and `@dskripchenko/ui` at run time, so it works from a CDN import map (as `@dskripchenko/embed` loads it).
+
 ## 0.1.1
 
 ### Patch Changes
