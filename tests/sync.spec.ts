@@ -63,14 +63,14 @@ class SteppedNet {
   }
 }
 
-async function scenario(seed: number, clients = 4, actions = 60) {
+async function scenario(seed: number, clients = 4, actions = 60, throttled = false) {
   const random = rng(seed)
   const net = new SteppedNet(random)
   const docs: BoardDoc[] = []
   const syncs: SyncClient[] = []
   for (let i = 0; i < clients; i++) {
     const doc = new BoardDoc()
-    const sync = new SyncClient(doc, net.provider(i), { client: `c${i}` })
+    const sync = new SyncClient(doc, net.provider(i), { client: `c${i}`, flushInterval: throttled ? 1e9 : 0 })
     await sync.ready
     docs.push(doc)
     syncs.push(sync)
@@ -88,10 +88,13 @@ async function scenario(seed: number, clients = 4, actions = 60) {
     else if (r < 0.8) doc.apply(bringToFront(doc.board, [id]))
     else if (r < 0.9) doc.undo()
     else doc.redo()
+    // Throttled: the flush window closes at random moments.
+    if (throttled && random() < 0.4) syncs[Math.floor(random() * clients)]!.flush()
     // Let some messages through between actions.
     const steps = Math.floor(random() * 4)
     for (let s = 0; s < steps; s++) net.step()
   }
+  for (const s of syncs) s.flush()
   while (net.busy()) net.step()
   return { net, docs, syncs }
 }
@@ -107,14 +110,25 @@ describe('sync: convergence', () => {
       }
     }
   }, 120_000)
+
+  it('…and with merged, throttled sending (1 000 scenarios)', async () => {
+    for (let seed = 1; seed <= 1000; seed++) {
+      const { net, docs, syncs } = await scenario(seed, 4, 60, true)
+      const expected = net.server.snapshot().board
+      for (let i = 0; i < docs.length; i++) {
+        expect(syncs[i]!.pendingCount, `seed ${seed}, client ${i}: pending`).toBe(0)
+        expect(docs[i]!.board, `seed ${seed}, client ${i}`).toEqual(expected)
+      }
+    }
+  }, 120_000)
 })
 
 describe('sync: client', () => {
   it('shows local changes at once and keeps them over remote ones until acknowledged', async () => {
     const net = new SteppedNet(rng(7))
     const a = new BoardDoc(), b = new BoardDoc()
-    const sa = new SyncClient(a, net.provider(0), { client: 'a' })
-    const sb = new SyncClient(b, net.provider(1), { client: 'b' })
+    const sa = new SyncClient(a, net.provider(0), { client: 'a', flushInterval: 0 })
+    const sb = new SyncClient(b, net.provider(1), { client: 'b', flushInterval: 0 })
     await Promise.all([sa.ready, sb.ready])
     const { id, ops } = createObject(a.board, 'sticky', { x: 0, y: 0 })
     a.apply(ops)
@@ -133,8 +147,8 @@ describe('sync: client', () => {
   it('remote changes are not in the local undo history', async () => {
     const net = new SteppedNet(rng(3))
     const a = new BoardDoc(), b = new BoardDoc()
-    const sa = new SyncClient(a, net.provider(0), { client: 'a' })
-    const sb = new SyncClient(b, net.provider(1), { client: 'b' })
+    const sa = new SyncClient(a, net.provider(0), { client: 'a', flushInterval: 0 })
+    const sb = new SyncClient(b, net.provider(1), { client: 'b', flushInterval: 0 })
     await Promise.all([sa.ready, sb.ready])
     b.apply(createObject(b.board, 'emoji', { x: 0, y: 0 }).ops)
     while (net.busy()) net.step()
@@ -149,7 +163,7 @@ describe('sync: client', () => {
       load: async () => ({ board: { version: 1, objects: {} }, seq: 0 }),
       send: () => {},
       onBatch: (cb) => ((deliver = cb), () => {}),
-    }, { client: 'x' })
+    }, { client: 'x', flushInterval: 0 })
     await sync.ready
     const make = (seq: number, id: string): SeqBatch => ({ seq, client: 'other', cseq: seq, ops: [{ k: 'create', id, obj: { id, type: 'emoji', char: '🙂', x: seq, y: 0, w: 10, h: 10, z: `a${seq}` } }] })
     deliver(make(2, 'second'))
@@ -182,5 +196,54 @@ describe('sync: server', () => {
     s.touch({ client: 'a', name: 'A' }, 1000)
     expect(s.touch({ client: 'b' }, 2000).map((p) => p.client)).toEqual(['a', 'b'])
     expect(s.touch({ client: 'b' }, 60_000).map((p) => p.client)).toEqual(['b'])
+  })
+})
+
+describe('sync: throttled sending', () => {
+  it('a drag of 60 moves goes out as a few merged batches; the other side sees the end position', async () => {
+    const net = new SteppedNet(rng(11))
+    const a = new BoardDoc(), b = new BoardDoc()
+    const sa = new SyncClient(a, net.provider(0), { client: 'a', flushInterval: 80 })
+    const sb = new SyncClient(b, net.provider(1), { client: 'b', flushInterval: 0 })
+    await Promise.all([sa.ready, sb.ready])
+    const { id, ops } = createObject(a.board, 'sticky', { x: 0, y: 0 })
+    a.apply(ops)
+    const sent: number[] = []
+    const t0 = Date.now()
+    for (let i = 0; i < 60; i++) {
+      a.apply(moveObjects(a.board, [id], 5, 0), { mergeKey: 'drag' })
+      await new Promise((r) => setTimeout(r, 5))
+      sent.push(net.up.get(0)!.length)
+    }
+    sa.flush()
+    const batches = net.up.get(0)!.length
+    // ~300 ms of dragging at 80 ms: a handful of batches instead of 61.
+    expect(batches).toBeLessThan(12)
+    expect(batches).toBeGreaterThan(1)
+    expect(Date.now() - t0).toBeGreaterThan(200)
+    while (net.busy()) net.step()
+    expect(b.board.objects[id]!.x).toBe(a.board.objects[id]!.x)
+    expect(sa.pendingCount).toBe(0)
+  })
+
+  it('compacts operations per object', async () => {
+    const { compactOps } = await import('../src')
+    const obj = { id: 'n', type: 'emoji', char: '🙂', x: 0, y: 0, w: 1, h: 1, z: 'a' } as const
+    expect(compactOps([
+      { k: 'set', id: 'a', props: { x: 1 } },
+      { k: 'set', id: 'b', props: { x: 9 } },
+      { k: 'set', id: 'a', props: { x: 2, y: 3 } },
+      { k: 'create', id: 'n', obj },
+      { k: 'set', id: 'n', props: { x: 5 } },
+      { k: 'create', id: 'gone', obj: { ...obj, id: 'gone' } },
+      { k: 'delete', id: 'gone' },
+      { k: 'set', id: 'd', props: { x: 1 } },
+      { k: 'delete', id: 'd' },
+    ])).toEqual([
+      { k: 'set', id: 'a', props: { x: 2, y: 3 } },
+      { k: 'set', id: 'b', props: { x: 9 } },
+      { k: 'create', id: 'n', obj: { ...obj, x: 5 } },
+      { k: 'delete', id: 'd' },
+    ])
   })
 })
