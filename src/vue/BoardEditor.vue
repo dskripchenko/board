@@ -549,6 +549,12 @@ function commitText(): void {
     apply(deleteObjects(board.value, [o.id]))
     return
   }
+  // Nothing changed (e.g. Escape on a new sticky): no undo step.
+  const before = ((o as unknown as Record<string, unknown>)[ed.field] as string | undefined) ?? ''
+  if (before === ed.value) {
+    root.value?.focus({ preventScroll: true })
+    return
+  }
   const ops: Op[] = setProps(board.value, [ed.id], { [ed.field]: ed.value === '' && ed.field !== 'text' ? null : ed.value })
   if (o.type === 'text') ops.push({ k: 'set', id: o.id, props: { h: textHeight(ed.value, o.w, o.variant) } })
   apply(ops)
