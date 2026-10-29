@@ -37,14 +37,22 @@ const users = [{ name: 'Анна', color: '#ec4899' }, { name: 'Борис', col
       v-if="hub"
       style="flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--uid-color-border)"
     >
-      <BoardEditor
+      <div
         v-for="u in users"
         :key="u.name"
-        :provider="hub.provider()"
-        :user="u"
-        :class="`collab-${u.name}`"
-        :minimap="false"
-      />
+        style="display: flex; flex-direction: column; min-height: 0; background: var(--uid-color-bg)"
+      >
+        <div :style="{ padding: '4px 12px', fontSize: '13px', fontWeight: 600, color: '#fff', background: u.color }">
+          {{ u.name }} — эта панель
+        </div>
+        <BoardEditor
+          :provider="hub.provider()"
+          :user="u"
+          :class="`collab-${u.name}`"
+          :minimap="false"
+          style="flex: 1; min-height: 0"
+        />
+      </div>
     </div>
     <div
       v-else

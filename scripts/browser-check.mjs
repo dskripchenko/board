@@ -222,7 +222,7 @@ await collab.mouse.move(lb.x + 200, lb.y + 200)
 await collab.mouse.move(lb.x + 260, lb.y + 240, { steps: 4 })
 await collab.waitForTimeout(500)
 check('collab: Anna\'s cursor with her name shows on the right', (await right.locator('.bd-cursor text', { hasText: 'Анна' }).count()) === 1)
-check('collab: presence avatars', (await right.locator('.bd-avatar').count()) === 1)
+check('collab: own avatar first, then the others', (await right.locator('.bd-avatar').count()) === 2 && (await right.locator('.bd-avatar--me').innerText()) === 'Б')
 // Undo on the left reaches the right.
 await left.locator('.bd-canvas').click({ position: { x: 5, y: 5 } })
 await collab.keyboard.press('Control+z')

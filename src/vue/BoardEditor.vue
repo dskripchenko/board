@@ -1236,6 +1236,16 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
     >
       <span class="bd-status-dot" />
       <span
+        v-if="user?.name"
+        class="bd-avatar bd-avatar--me"
+        :style="{ background: myColor }"
+        :title="`${user.name} (${L.you})`"
+      >{{ user.name.slice(0, 1).toUpperCase() }}</span>
+      <span
+        v-if="user?.name && others.length"
+        class="bd-avatar-sep"
+      />
+      <span
         v-for="o in others.slice(0, 6)"
         :key="o.client"
         class="bd-avatar"
