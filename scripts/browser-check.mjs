@@ -223,6 +223,19 @@ await page.screenshot({ path: join(out, '3-dark.png') })
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
 
+// A board in a zero-size container (hidden, not laid out yet) draws no NaN.
+const hidden = await browser.newPage({ viewport: { width: 1000, height: 700 } })
+const hErrors = []
+hidden.on('console', (m) => m.type() === 'error' && hErrors.push(m.text()))
+await hidden.goto(url + (url.includes('?') ? '&' : '?') + 'empty')
+await hidden.waitForSelector('.bd-root')
+await hidden.evaluate(() => { document.querySelector('.bd-root').parentElement.style.height = '0px' })
+await hidden.waitForTimeout(300)
+await hidden.evaluate(() => { document.querySelector('.bd-root').parentElement.style.height = '' })
+await hidden.waitForTimeout(300)
+check('a zero-size board logs no NaN', !hErrors.some((t) => /NaN/.test(t)), hErrors.slice(0, 2).join(' | '))
+await hidden.close()
+
 // Two editors on one hub (≈90 ms latency): changes and cursors travel.
 const collab = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const cErrors = []
