@@ -1,4 +1,5 @@
 export interface BoardLabels {
+  pen: string; marker: string; eraser: string; width: string
   select: string; hand: string; sticky: string; shape: string; text: string; frame: string; connector: string; emoji: string
   undo: string; redo: string; zoomIn: string; zoomOut: string; fit: string; minimap: string
   exportPng: string; exportSvg: string; exportJson: string; export: string
@@ -12,6 +13,7 @@ export interface BoardLabels {
 }
 
 const en: BoardLabels = {
+  pen: 'Pen (P)', marker: 'Marker (M)', eraser: 'Eraser (X)', width: 'Width',
   select: 'Select (V)', hand: 'Hand (H)', sticky: 'Sticky note (N)', shape: 'Shape (S)', text: 'Text (T)', frame: 'Frame (F)', connector: 'Connector (L)', emoji: 'Emoji (E)',
   undo: 'Undo', redo: 'Redo', zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit to screen', minimap: 'Minimap',
   exportPng: 'PNG image', exportSvg: 'SVG image', exportJson: 'Board JSON', export: 'Export',
@@ -25,6 +27,7 @@ const en: BoardLabels = {
 }
 
 const ru: BoardLabels = {
+  pen: 'Карандаш (P)', marker: 'Маркер (M)', eraser: 'Ластик (X)', width: 'Толщина',
   select: 'Выбор (V)', hand: 'Рука (H)', sticky: 'Стикер (N)', shape: 'Фигура (S)', text: 'Текст (T)', frame: 'Блок (F)', connector: 'Связь (L)', emoji: 'Эмодзи (E)',
   undo: 'Отменить', redo: 'Повторить', zoomIn: 'Приблизить', zoomOut: 'Отдалить', fit: 'Показать всё', minimap: 'Мини-карта',
   exportPng: 'Картинка PNG', exportSvg: 'Картинка SVG', exportJson: 'Доска в JSON', export: 'Экспорт',

@@ -13,7 +13,7 @@ export class BoardError extends Error {
   }
 }
 
-const TYPES: ObjectType[] = ['shape', 'sticky', 'text', 'frame', 'connector', 'emoji']
+const TYPES: ObjectType[] = ['shape', 'sticky', 'text', 'frame', 'connector', 'emoji', 'ink']
 const KINDS: ShapeKind[] = ['rect', 'rounded', 'ellipse', 'diamond', 'triangle', 'parallelogram', 'hexagon', 'star']
 
 export function emptyBoard(): Board {
@@ -72,6 +72,18 @@ export function parseBoard(input: unknown): Board {
         }
         if (!['straight', 'elbow', 'curve'].includes(obj.route as string)) obj.route = 'elbow'
         break
+      case 'ink': {
+        const pts = obj.points
+        if (!Array.isArray(pts) || pts.length < 2 || pts.length % 2 !== 0 || !pts.every((n) => typeof n === 'number' && Number.isFinite(n))) {
+          throw new BoardError('a stroke needs points: x,y pairs', `${at}/points`)
+        }
+        if (obj.tool !== 'marker') obj.tool = 'pen'
+        if (typeof obj.vw !== 'number' || obj.vw <= 0) obj.vw = Math.max(1, obj.w as number)
+        if (typeof obj.vh !== 'number' || obj.vh <= 0) obj.vh = Math.max(1, obj.h as number)
+        if (typeof obj.color !== 'string') obj.color = '#1f2937'
+        if (typeof obj.width !== 'number' || obj.width <= 0) obj.width = obj.tool === 'marker' ? 20 : 3
+        break
+      }
       case 'emoji':
         if (typeof obj.char !== 'string' || obj.char === '') throw new BoardError('an emoji needs a char', `${at}/char`)
         break

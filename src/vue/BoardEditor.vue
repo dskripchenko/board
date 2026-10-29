@@ -8,7 +8,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw,
 import { UidButton, UidTooltip } from '@dskripchenko/ui'
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
-  ArrowDownToLine, ArrowUpToLine, Circle, Copy, Diamond, Download, Frame, Hand, Hexagon, Lock, LockOpen, Map as MapIcon,
+  ArrowDownToLine, ArrowUpToLine, Circle, Copy, Diamond, Download, Eraser, Frame, Hand, Hexagon, Highlighter, Lock, LockOpen, Map as MapIcon, Pencil,
   Maximize, Minus, MousePointer2, Plus, Redo2, Smile, Spline, Square, Star, StickyNote, Trash2, Triangle, Type, Undo2,
 } from '@dskripchenko/ui/icons'
 import type { Board, BoardObject, ConnectorEnd, ConnectorObject, Point, Rect, ShapeKind, StickyColor } from '../model/types'
@@ -22,9 +22,10 @@ import {
   align as alignCmd, bringToFront, createConnector, createObject, deleteObjects, distribute, duplicate, moveObjects, pasteObjects,
   resizeObject, scaleObjects, sendToBack, setProps, withChildren, wrapInFrame, type AlignEdge,
 } from '../edit'
-import { bounds, boardBounds, center, connectorPoints, hitTest, objectsInRect, rotatePoint, shapePath, unionRects, visibleObjects } from '../geometry'
+import { bounds, boardBounds, center, connectorPoints, hitTest, hitsInk, objectsInRect, rotatePoint, shapePath, unionRects, visibleObjects } from '../geometry'
 import { boardToSvg, PALETTE, renderObject, STICKY_FILL, TEXT_STYLE, type SvgNode } from '../render'
 import { snapRect, type Guide } from '../snap'
+import { createInk, smoothPath } from '../ink'
 import { LINE_HEIGHT, wrapLines } from '../text'
 import { toScreen } from '../viewport'
 import { canvasMeasurer } from './measure'
@@ -32,7 +33,7 @@ import { useViewport } from './useViewport'
 import SvgTree from './SvgTree'
 import { EMOJI, resolveLabels, type BoardLabels } from './labels'
 
-type Tool = 'select' | 'hand' | 'sticky' | 'shape' | 'text' | 'frame' | 'connector' | 'emoji'
+type Tool = 'select' | 'hand' | 'sticky' | 'shape' | 'text' | 'frame' | 'connector' | 'emoji' | 'pen' | 'marker' | 'eraser'
 
 const props = withDefaults(
   defineProps<{
@@ -234,15 +235,26 @@ const tools = computed(() => [
   { id: 'frame' as const, icon: Frame, label: L.value.frame },
   { id: 'connector' as const, icon: Spline, label: L.value.connector },
   { id: 'emoji' as const, icon: Smile, label: L.value.emoji },
+  { id: 'pen' as const, icon: Pencil, label: L.value.pen },
+  { id: 'marker' as const, icon: Highlighter, label: L.value.marker },
+  { id: 'eraser' as const, icon: Eraser, label: L.value.eraser },
 ])
+const PEN_COLORS = ['#1f2937', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#ffffff']
+const MARKER_COLORS = ['#fde047', '#86efac', '#93c5fd', '#f9a8d4', '#fdba74', '#c4b5fd']
+const PEN_WIDTHS = [2, 4, 8]
+const MARKER_WIDTHS = [12, 20, 32]
+const ink = ref({ pen: { color: PEN_COLORS[0]!, width: 2 }, marker: { color: MARKER_COLORS[0]!, width: 20 } })
+const inkOpen = ref(false)
 const SHAPES: ShapeKind[] = ['rect', 'rounded', 'ellipse', 'diamond', 'triangle', 'parallelogram', 'hexagon', 'star']
 function shapeIcon(k: ShapeKind) {
   return k === 'ellipse' ? Circle : k === 'diamond' ? Diamond : k === 'triangle' ? Triangle : k === 'hexagon' ? Hexagon : k === 'star' ? Star : Square
 }
 function pickTool(t: Tool): void {
+  const again = tool.value === t
   tool.value = t
   shapeOpen.value = t === 'shape' ? !shapeOpen.value : false
   emojiOpen.value = t === 'emoji' ? !emojiOpen.value : false
+  inkOpen.value = t === 'pen' || t === 'marker' ? !again || !inkOpen.value : false
   if (t !== 'select') editing.value = null
 }
 
@@ -258,6 +270,8 @@ type Interaction =
   | { kind: 'create'; type: 'shape' | 'frame'; start: Point; cur: Point }
   | { kind: 'connect'; from: ConnectorEnd; start: Point; cur: Point }
   | { kind: 'end'; id: string; which: 'from' | 'to'; cur: Point }
+  | { kind: 'draw'; tool: 'pen' | 'marker'; points: Point[] }
+  | { kind: 'erase'; ids: Set<string>; last: Point }
 
 const inter = shallowRef<Interaction | null>(null)
 const guides = ref<Guide[]>([])
@@ -286,6 +300,7 @@ function onPointerDown(e: PointerEvent): void {
   if (editing.value) commitText()
   shapeOpen.value = false
   exportOpen.value = false
+  inkOpen.value = false
   const p = world(e)
   lastPointer = p
   ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
@@ -336,6 +351,15 @@ function onPointerDown(e: PointerEvent): void {
     case 'connector':
       inter.value = { kind: 'connect', from: endFor(p), start: p, cur: p }
       return
+    case 'pen':
+    case 'marker':
+      inter.value = { kind: 'draw', tool: tool.value, points: [p] }
+      drawTick.value++
+      return
+    case 'eraser':
+      inter.value = { kind: 'erase', ids: new Set(), last: p }
+      eraseAt(inter.value, p)
+      return
   }
   // select tool
   const hit = hitTest(board.value, p, 4 / view.value.k)
@@ -355,6 +379,23 @@ function onPointerDown(e: PointerEvent): void {
   const others = visible.value.filter((o) => !moving.has(o.id) && o.type !== 'connector').map((o) => bounds(o))
   inter.value = { kind: 'move', start: p, ids, applied: { x: 0, y: 0 }, moved: false, others, box: selectionBox.value ?? bounds(hit) }
   dragSeq++
+}
+
+/** Bumped while drawing: the live stroke re-renders without copying its points. */
+const drawTick = ref(0)
+
+/** Erases along the path from the last pointer position: fast moves skip no strokes. */
+function eraseAt(it: { ids: Set<string>; last: Point }, p: Point): void {
+  const before = it.ids.size
+  const tol = 6 / view.value.k
+  const steps = Math.max(1, Math.ceil(Math.hypot(p.x - it.last.x, p.y - it.last.y) / tol))
+  const inks = visible.value.filter((o) => o.type === 'ink' && !o.locked && !it.ids.has(o.id))
+  for (let i = 1; i <= steps; i++) {
+    const q = { x: it.last.x + ((p.x - it.last.x) * i) / steps, y: it.last.y + ((p.y - it.last.y) * i) / steps }
+    for (const o of inks) if (o.type === 'ink' && !it.ids.has(o.id) && hitsInk(o, q, tol)) it.ids.add(o.id)
+  }
+  it.last = p
+  if (it.ids.size !== before) drawTick.value++
 }
 
 function onPointerMove(e: PointerEvent): void {
@@ -422,6 +463,20 @@ function onPointerMove(e: PointerEvent): void {
       it.cur = p
       inter.value = { ...it }
       return
+    case 'draw': {
+      const last = it.points[it.points.length - 1]!
+      // Coalesced events give the pen's full resolution.
+      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : []
+      for (const ev of events.length ? events : [e]) {
+        const q = world(ev)
+        if (Math.hypot(q.x - last.x, q.y - last.y) * view.value.k >= 1) it.points.push(q)
+      }
+      drawTick.value++
+      return
+    }
+    case 'erase':
+      eraseAt(it, p)
+      return
   }
 }
 
@@ -452,6 +507,12 @@ function onPointerUp(e: PointerEvent): void {
     apply(ops)
     select([id])
     tool.value = 'select'
+  } else if (it.kind === 'draw') {
+    const style = ink.value[it.tool]
+    const created = createInk(board.value, it.points, { tool: it.tool, color: style.color, width: style.width }, 0.6 / view.value.k)
+    apply(created.ops)
+  } else if (it.kind === 'erase') {
+    if (it.ids.size) apply(deleteObjects(board.value, it.ids))
   } else if (it.kind === 'end') {
     const c = board.value.objects[it.id] as ConnectorObject | undefined
     if (!c) return
@@ -738,10 +799,10 @@ function onKey(e: KeyboardEvent): void {
     apply(moveObjects(board.value, selection.value, dx, dy), 'nudge')
     return
   }
-  const map: Record<string, Tool> = { v: 'select', h: 'hand', n: 'sticky', s: 'shape', t: 'text', f: 'frame', l: 'connector', e: 'emoji' }
+  const map: Record<string, Tool> = { v: 'select', h: 'hand', n: 'sticky', s: 'shape', t: 'text', f: 'frame', l: 'connector', e: 'emoji', p: 'pen', m: 'marker', x: 'eraser' }
   if (map[k]) {
     tool.value = map[k]!
-    shapeOpen.value = emojiOpen.value = false
+    shapeOpen.value = emojiOpen.value = inkOpen.value = false
   }
 }
 function onKeyUp(e: KeyboardEvent): void {
@@ -828,6 +889,24 @@ const preview = computed(() => {
     return { kind: 'line', x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, target: tr ? { ...toScreen(view.value, tr), w: tr.w * view.value.k, h: tr.h * view.value.k } : null }
   }
   return null
+})
+
+const liveStroke = computed(() => {
+  void drawTick.value
+  const it = inter.value
+  if (!it || it.kind !== 'draw') return null
+  const style = ink.value[it.tool]
+  return {
+    d: smoothPath(it.points.map((p) => toScreen(view.value, p))),
+    color: style.color,
+    width: style.width * view.value.k,
+    marker: it.tool === 'marker',
+  }
+})
+const erasing = computed(() => {
+  void drawTick.value
+  const it = inter.value
+  return it && it.kind === 'erase' ? it.ids : null
 })
 
 const guideLines = computed(() =>
@@ -1003,7 +1082,7 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
           v-for="o in visible"
           :key="o.id"
           :node="rendered(o)"
-          :class="{ 'bd-editing': editing?.id === o.id }"
+          :class="{ 'bd-editing': editing?.id === o.id, 'bd-erasing': erasing?.has(o.id) }"
         />
       </g>
       <g class="bd-overlay">
@@ -1020,6 +1099,17 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
           :key="ol.id"
           :d="ol.d"
           class="bd-outline"
+        />
+        <path
+          v-if="liveStroke"
+          :d="liveStroke.d"
+          fill="none"
+          :stroke="liveStroke.color"
+          :stroke-width="liveStroke.width"
+          :stroke-opacity="liveStroke.marker ? 0.45 : 1"
+          :stroke-linecap="liveStroke.marker ? 'square' : 'round'"
+          stroke-linejoin="round"
+          class="bd-live-stroke"
         />
         <line
           v-for="(g, i) in guideLines"
@@ -1247,6 +1337,35 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
       </button>
     </div>
 
+    <div
+      v-if="inkOpen && (tool === 'pen' || tool === 'marker')"
+      class="bd-panel bd-flyout bd-flyout--ink"
+    >
+      <button
+        v-for="c in (tool === 'pen' ? PEN_COLORS : MARKER_COLORS)"
+        :key="c"
+        type="button"
+        :class="['bd-color', { 'is-active': ink[tool].color === c }]"
+        :style="{ background: c }"
+        :aria-label="c"
+        @click="ink[tool].color = c"
+      />
+      <span class="bd-flyout-break" />
+      <button
+        v-for="w in (tool === 'pen' ? PEN_WIDTHS : MARKER_WIDTHS)"
+        :key="w"
+        type="button"
+        :class="['bd-swatch-btn', { 'is-active': ink[tool].width === w }]"
+        :aria-label="`${L.width} ${w}`"
+        @click="ink[tool].width = w"
+      >
+        <span
+          class="bd-width-dot"
+          :style="{ width: `${Math.min(24, w)}px`, height: `${Math.min(24, w)}px`, background: ink[tool].color, opacity: tool === 'marker' ? 0.6 : 1 }"
+        />
+      </button>
+    </div>
+
     <!-- context bar -->
     <div
       v-if="barPos && selectedObjects.length"
@@ -1265,6 +1384,26 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
           :aria-label="sw.id"
           @click="setSel({ color: sw.id })"
         />
+        <span class="bd-sep" />
+      </template>
+      <template v-if="onlyType === 'ink'">
+        <button
+          v-for="c in [...PEN_COLORS.slice(0, 7), ...MARKER_COLORS.slice(0, 3)]"
+          :key="'i' + c"
+          type="button"
+          class="bd-color bd-color--sm"
+          :style="{ background: c }"
+          @click="setSel({ color: c })"
+        />
+        <UidButton
+          v-for="w in [2, 4, 8, 20]"
+          :key="'w' + w"
+          size="sm"
+          :variant="single?.type === 'ink' && single.width === w ? 'secondary' : 'ghost'"
+          @click="setSel({ width: w })"
+        >
+          {{ w }}
+        </UidButton>
         <span class="bd-sep" />
       </template>
       <template v-if="onlyType === 'shape'">

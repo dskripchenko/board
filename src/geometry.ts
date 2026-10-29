@@ -1,5 +1,6 @@
 import type { Board, BoardObject, ConnectorEnd, ConnectorObject, Point, Rect, ShapeKind, Side } from './model/types'
 import { compareZ } from './model/zindex'
+import { inkWorldPoints } from './ink'
 
 export function center(r: Rect): Point {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 }
@@ -79,6 +80,10 @@ export function hitTest(board: Board, p: Point, tolerance = 4): BoardObject | nu
       if (distanceToPolyline(p, connectorPoints(o, board)) <= tolerance + (o.strokeWidth ?? 2)) return o
       continue
     }
+    if (o.type === 'ink') {
+      if (hitsInk(o, p, tolerance)) return o
+      continue
+    }
     const local = rotatePoint(p, center(o), -(o.rotation ?? 0))
     const inside = local.x >= o.x - tolerance && local.x <= o.x + o.w + tolerance && local.y >= o.y - tolerance && local.y <= o.y + o.h + tolerance
     if (!inside) continue
@@ -93,6 +98,16 @@ export function hitTest(board: Board, p: Point, tolerance = 4): BoardObject | nu
 }
 
 export const FRAME_TITLE_BAND = 28
+
+/** Whether a point touches a stroke (its line, not its bounding box). */
+export function hitsInk(o: Extract<BoardObject, { type: 'ink' }>, p: Point, tolerance = 4): boolean {
+  const b = bounds(o)
+  const pad = tolerance + o.width
+  if (p.x < b.x - pad || p.x > b.x + b.w + pad || p.y < b.y - pad || p.y > b.y + b.h + pad) return false
+  const pts = inkWorldPoints(o)
+  if (pts.length === 1) return Math.hypot(p.x - pts[0]!.x, p.y - pts[0]!.y) <= tolerance + o.width / 2
+  return distanceToPolyline(p, pts) <= tolerance + o.width / 2
+}
 
 function hasObjectAt(below: BoardObject[], p: Point): boolean {
   return below.some((o) => o.type !== 'frame' && o.type !== 'connector' && p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h)

@@ -10,7 +10,7 @@ export interface BoardMeta {
   background?: 'dots' | 'grid' | 'none'
 }
 
-export type ObjectType = 'shape' | 'sticky' | 'text' | 'frame' | 'connector' | 'emoji'
+export type ObjectType = 'shape' | 'sticky' | 'text' | 'frame' | 'connector' | 'emoji' | 'ink'
 
 interface Base {
   id: string
@@ -97,7 +97,25 @@ export interface EmojiObject extends Base {
   char: string
 }
 
-export type BoardObject = ShapeObject | StickyObject | TextObject | FrameObject | ConnectorObject | EmojiObject
+export type InkTool = 'pen' | 'marker'
+
+/**
+ * A freehand stroke. `points` are x,y pairs relative to the top-left corner,
+ * drawn in a `vw` × `vh` box that is stretched to `w` × `h` (so resizing needs
+ * no change of the points); the line keeps its width when stretched.
+ */
+export interface InkObject extends Base {
+  type: 'ink'
+  tool: InkTool
+  points: number[]
+  vw: number
+  vh: number
+  color: string
+  /** Line width in px. */
+  width: number
+}
+
+export type BoardObject = ShapeObject | StickyObject | TextObject | FrameObject | ConnectorObject | EmojiObject | InkObject
 
 export interface Point {
   x: number

@@ -130,6 +130,39 @@ const png = await page.evaluate(async () => {
 })
 void png
 
+// Pen, marker, eraser.
+const inks = () => page.locator('.bd-ink').count()
+const drawStroke = async (x1, y1, x2, y2) => {
+  await page.mouse.move(at(x1, y1).x, at(x1, y1).y)
+  await page.mouse.down()
+  for (let i = 1; i <= 12; i++) await page.mouse.move(at(x1 + ((x2 - x1) * i) / 12, y1 + ((y2 - y1) * i) / 12 + (i % 2) * 8).x, at(x1 + ((x2 - x1) * i) / 12, y1 + ((y2 - y1) * i) / 12 + (i % 2) * 8).y)
+  await page.mouse.up()
+}
+await page.locator('.bd-tool--pen').click()
+check('pen: the colour and width flyout opens', (await page.locator('.bd-flyout--ink').count()) === 1)
+await page.locator('.bd-flyout--ink .bd-color').nth(1).click()
+await drawStroke(300, 420, 520, 470)
+check('pen draws a stroke', (await inks()) === 1)
+check('pen uses the picked colour', (await page.locator('.bd-ink path').first().getAttribute('stroke')) === '#ef4444')
+await page.keyboard.press('m')
+await drawStroke(300, 480, 520, 480)
+check('marker draws a translucent stroke', (await inks()) === 2 && (await page.locator('.bd-ink path').nth(1).getAttribute('stroke-opacity')) === '0.45')
+await page.screenshot({ path: join(out, '5-ink.png') })
+await page.keyboard.press('x')
+await drawStroke(400, 400, 400, 520)
+check('eraser removes the strokes it touches', (await inks()) === 0)
+await page.keyboard.press('Control+z')
+check('undo brings erased strokes back', (await inks()) === 2)
+await page.keyboard.press('v')
+const inkBox = await page.locator('.bd-ink').first().boundingBox()
+await page.mouse.click(inkBox.x + inkBox.width / 2, inkBox.y + inkBox.height / 2)
+await page.waitForTimeout(150)
+check('a stroke can be selected', (await page.locator('.bd-outline').count()) === 1)
+await page.keyboard.press('Delete')
+await page.keyboard.press('Control+z')
+for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z')
+await page.keyboard.press('Escape')
+
 // Group resize: select two stickies, drag the south-east handle.
 await page.keyboard.press('Escape')
 const s1b = await page.locator('.bd-sticky').nth(0).boundingBox()

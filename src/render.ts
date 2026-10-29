@@ -7,6 +7,7 @@
 import type { Board, BoardObject, ConnectorObject, Point, Rect, StickyColor, TextVariant } from './model/types'
 import { bounds, center, connectorPoints, FRAME_TITLE_BAND, shapePath, stacked, unionRects } from './geometry'
 import { approximateMeasurer, fitFontSize, LINE_HEIGHT, wrapLines, type TextMeasurer } from './text'
+import { inkLocalPoints, smoothPath } from './ink'
 
 export interface SvgNode {
   tag: string
@@ -135,6 +136,26 @@ export function renderObject(o: BoardObject, board: Board, options: RenderOption
         { tag: 'rect', attrs: { x: o.x, y: o.y, width: o.w, height: o.h, rx: 8, fill: o.fill ?? V.frameFill, stroke: V.frameStroke, 'stroke-width': 1 } },
         { tag: 'text', attrs: { x: o.x + 12, y: o.y + FRAME_TITLE_BAND - 9, 'font-size': 14, 'font-weight': 600, fill: o.fill ? textOn(o.fill, V.frameTitle) : V.frameTitle, 'fill-opacity': o.fill ? 0.75 : undefined, class: 'bd-text' }, children: [o.title || ''] },
       ])
+    case 'ink': {
+      const marker = o.tool === 'marker'
+      return rotated(o, g([
+        {
+          tag: 'path',
+          attrs: {
+            d: smoothPath(inkLocalPoints(o)),
+            transform: `translate(${o.x} ${o.y}) scale(${o.w / o.vw} ${o.h / o.vh})`,
+            fill: 'none',
+            stroke: o.color,
+            'stroke-width': o.width,
+            'stroke-linecap': marker ? 'square' : 'round',
+            'stroke-linejoin': 'round',
+            'stroke-opacity': marker ? 0.45 : undefined,
+            'vector-effect': 'non-scaling-stroke',
+            style: marker ? 'mix-blend-mode:multiply' : undefined,
+          },
+        },
+      ]))
+    }
     case 'emoji': {
       const size = Math.min(o.w, o.h) * 0.82
       return rotated(o, g([

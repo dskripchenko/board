@@ -5,7 +5,7 @@ import { keyBetween, keysBetween, compareZ } from './model/zindex'
 import { bounds, center, contains, resolveEnd, stacked, unionRects } from './geometry'
 
 /** Default sizes of new objects. */
-export const DEFAULT_SIZE: Record<Exclude<ObjectType, 'connector'>, { w: number; h: number }> = {
+export const DEFAULT_SIZE: Record<Exclude<ObjectType, 'connector' | 'ink'>, { w: number; h: number }> = {
   shape: { w: 160, h: 100 },
   sticky: { w: 200, h: 200 },
   text: { w: 240, h: 40 },
@@ -32,7 +32,7 @@ export function frameAt(board: Board, p: Point, exclude: Set<string> = new Set()
 type NewProps = Partial<BoardObject> & Record<string, unknown>
 
 /** A new object centred at `at` (a frame — its top-left at `at`), placed in the frame under it, on top of the stack. */
-export function createObject(board: Board, type: Exclude<ObjectType, 'connector'>, at: Point, props: NewProps = {}): { id: string; ops: Op[] } {
+export function createObject(board: Board, type: Exclude<ObjectType, 'connector' | 'ink'>, at: Point, props: NewProps = {}): { id: string; ops: Op[] } {
   const id = newId()
   const size = { ...DEFAULT_SIZE[type], ...pick(props, ['w', 'h']) }
   const x = type === 'frame' ? at.x : at.x - size.w / 2

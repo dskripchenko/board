@@ -266,3 +266,27 @@ describe('render', () => {
     expect(lines.join(' ')).toBe('Долгие согласования ТЗ с рисками')
   })
 })
+
+describe('ink', () => {
+  it('simplifies, smooths and creates strokes; hit tests the line, not the box', async () => {
+    const { simplify, smoothPath, createInk, hitsInk, emptyBoard: empty, applyOps: run2, boardToSvg, parseBoard: parse, MAX_INK_POINTS } = await import('../src')
+    const line = Array.from({ length: 101 }, (_, i) => ({ x: i, y: 0.1 * Math.sin(i) }))
+    expect(simplify(line, 0.5).length).toBe(2)
+    expect(smoothPath([{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 0 }])).toMatch(/^M0 0 Q5 5/)
+    const diagonal = Array.from({ length: 50 }, (_, i) => ({ x: i * 4, y: i * 4 + (i % 2) * 3 }))
+    const { ids, ops } = createInk(empty(), diagonal, { tool: 'pen', color: '#ef4444', width: 4 })
+    const board = run2(empty(), ops).board
+    const o = board.objects[ids[0]!]!
+    expect(o).toMatchObject({ type: 'ink', tool: 'pen', width: 4 })
+    if (o.type !== 'ink') throw new Error('ink expected')
+    expect(hitsInk(o, { x: 100, y: 101 })).toBe(true)
+    expect(hitsInk(o, { x: 190, y: 10 })).toBe(false)
+    // Stretched by a resize: still hit along the stretched line.
+    const wide = { ...o, w: o.w * 2 }
+    expect(hitsInk(wide, { x: o.x + (100 - o.x) * 2, y: 101 })).toBe(true)
+    const many = Array.from({ length: MAX_INK_POINTS * 2 + 10 }, (_, i) => ({ x: i * 3, y: (i % 2) * 20 }))
+    expect(createInk(empty(), many, { tool: 'marker', color: '#fde047', width: 20 }, 0.01).ids.length).toBe(3)
+    expect(boardToSvg(board).svg).toContain('bd-ink')
+    expect(() => parse({ objects: { s: { type: 'ink', x: 0, y: 0, w: 1, h: 1, points: [1, 2, 3] } } })).toThrow(/points/)
+  })
+})

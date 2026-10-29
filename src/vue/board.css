@@ -25,7 +25,7 @@
 .bd-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; }
 .bd-tool-hand .bd-canvas, .bd-panning .bd-canvas { cursor: grab; }
 .bd-root--readonly .bd-canvas { cursor: grab; }
-.bd-tool-sticky .bd-canvas, .bd-tool-shape .bd-canvas, .bd-tool-text .bd-canvas, .bd-tool-frame .bd-canvas, .bd-tool-connector .bd-canvas, .bd-tool-emoji .bd-canvas { cursor: crosshair; }
+.bd-tool-pen .bd-canvas, .bd-tool-marker .bd-canvas, .bd-tool-eraser .bd-canvas, .bd-tool-sticky .bd-canvas, .bd-tool-shape .bd-canvas, .bd-tool-text .bd-canvas, .bd-tool-frame .bd-canvas, .bd-tool-connector .bd-canvas, .bd-tool-emoji .bd-canvas { cursor: crosshair; }
 .bd-dot { fill: var(--bd-dot); }
 .bd-text { font-family: inherit; white-space: pre; }
 .bd-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
@@ -112,3 +112,10 @@
 .bd-avatar { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; }
 .bd-cursor { transition: transform 0.1s linear; }
 .bd-cursor text { font-family: inherit; }
+
+.bd-erasing { opacity: 0.25; }
+.bd-flyout--ink { width: 196px; }
+.bd-flyout-break { flex-basis: 100%; height: 4px; }
+.bd-color.is-active { outline: 2px solid var(--bd-accent); outline-offset: 2px; }
+.bd-width-dot { display: block; border-radius: 50%; }
+.bd-live-stroke { pointer-events: none; }
