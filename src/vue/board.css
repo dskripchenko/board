@@ -122,3 +122,9 @@
 .bd-avatar--me { box-shadow: 0 0 0 2px var(--bd-surface), 0 0 0 3.5px currentColor; color: #fff; }
 .bd-avatar-sep { width: 1px; height: 16px; margin: 0 2px; background: var(--uid-color-border, #e5e7eb); }
 .bd-locked { left: 50%; top: 12px; transform: translateX(-50%); gap: 8px; padding: 6px 8px 6px 12px; font-size: 13px; color: var(--bd-text); }
+
+.bd-flyout--templates { width: 300px; top: 72px; transform: none; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+.bd-template { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: none; border-radius: 6px; background: none; color: var(--bd-text); font: inherit; text-align: left; cursor: pointer; }
+.bd-template:hover, .bd-template:focus-visible { background: color-mix(in srgb, var(--bd-accent) 10%, transparent); outline: none; }
+.bd-template__title { font-size: 13px; font-weight: 600; }
+.bd-template__desc { font-size: 12px; color: var(--bd-frame-title); }

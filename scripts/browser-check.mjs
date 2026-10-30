@@ -223,6 +223,28 @@ await page.screenshot({ path: join(out, '3-dark.png') })
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
 
+// Workshop templates: each lands on an empty board in view, selected.
+const tpl = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const tErrors = []
+tpl.on('pageerror', (e) => tErrors.push(e.message))
+await tpl.goto(url + (url.includes('?') ? '&' : '?') + 'empty&lang=ru')
+await tpl.waitForSelector('.bd-root')
+// The playground's status line counts the whole board (the canvas draws only what is in view).
+const tplCount = async () => Number(/(\d+)/.exec((await tpl.locator('header, .pg-status, body').first().innerText()).split('·')[1] ?? '')?.[1] ?? 0)
+let placedBefore = 0
+for (const id of ['event-storming', 'customer-journey', 'story-map', 'retrospective']) {
+  await tpl.locator('[data-control="templates"]').click()
+  await tpl.locator(`[data-template="${id}"]`).click()
+  await tpl.waitForTimeout(700)
+  const after = await tplCount()
+  check(`template ${id}: placed`, after > placedBefore + 5, `${after - placedBefore} objects`)
+  placedBefore = after
+  await tpl.screenshot({ path: join(out, `template-${id}.png`) })
+}
+check('templates: the menu speaks Russian', (await tpl.locator('[data-control="templates"]').getAttribute('aria-label')) === 'Шаблоны')
+check('templates: no page errors', tErrors.length === 0, tErrors.join('; '))
+await tpl.close()
+
 // A board in a zero-size container (hidden, not laid out yet) draws no NaN.
 const hidden = await browser.newPage({ viewport: { width: 1000, height: 700 } })
 const hErrors = []
