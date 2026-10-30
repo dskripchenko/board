@@ -7,9 +7,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch } from 'vue'
 import { UidButton, UidTooltip } from '@dskripchenko/ui'
 import {
-  AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
-  ArrowDownToLine, ArrowUpToLine, Circle, Copy, Diamond, Download, Eraser, Frame, Hand, Hexagon, Highlighter, Lock, LockOpen, Map as MapIcon, Pencil,
-  Maximize, Minus, MousePointer2, Plus, Redo2, Smile, Spline, Square, Star, StickyNote, Trash2, Triangle, Type, Undo2,
+  AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, ArrowDownToLine, ArrowUpToLine, Circle, Copy, Diamond, Download, Eraser, Frame, Hand, Hexagon, Highlighter, Lock, LockOpen, Map as MapIcon, Pencil, Maximize, Minus, MousePointer2, Plus, Redo2, Smile, Spline, Square, Star, StickyNote, Trash2, Triangle, Type, Undo2, LayoutTemplate,
 } from 'lucide-vue-next'
 import type { Board, BoardObject, ConnectorEnd, ConnectorObject, Point, Rect, ShapeKind, StickyColor } from '../model/types'
 import { STICKY_COLORS } from '../model/types'
@@ -26,6 +24,7 @@ import {
 import { bounds, boardBounds, center, connectorPoints, hitTest, hitsInk, objectsInRect, rotatePoint, shapePath, unionRects, visibleObjects } from '../geometry'
 import { boardToSvg, PALETTE, renderObject, STICKY_FILL, TEXT_STYLE, type SvgNode } from '../render'
 import { snapRect, type Guide } from '../snap'
+import { insertTemplate, listTemplates, type TemplateId } from '../templates'
 import { createInk, smoothPath } from '../ink'
 import { LINE_HEIGHT, wrapLines } from '../text'
 import { toScreen } from '../viewport'
@@ -189,6 +188,25 @@ onBeforeUnmount(() => {
   off()
   vp.dispose()
 })
+
+/** The workshop templates: one is placed in the middle of the view, selected and brought into view. */
+const templatesOpen = ref(false)
+const templates = computed(() => listTemplates(props.locale ?? (typeof document !== 'undefined' ? document.documentElement.lang : undefined)))
+function addTemplate(id: TemplateId): void {
+  templatesOpen.value = false
+  const lang = props.locale ?? (typeof document !== 'undefined' ? document.documentElement.lang : undefined)
+  let placed = insertTemplate(board.value, id, center(viewRect.value), lang)
+  // Not on top of what is there: beside the board's content instead.
+  const taken = boardBounds(board.value)
+  const a = placed.bounds
+  if (taken && a.x < taken.x + taken.w && taken.x < a.x + a.w && a.y < taken.y + taken.h && taken.y < a.y + a.h) {
+    placed = insertTemplate(board.value, id, { x: taken.x + taken.w + 120 + a.w / 2, y: taken.y + a.h / 2 }, lang)
+  }
+  const { ids, ops, bounds: area } = placed
+  apply(ops)
+  select(ids.slice(0, 1))
+  vp.fit(area, true, 64)
+}
 
 function fitAll(smooth = true): void {
   const b = boardBounds(board.value)
@@ -803,7 +821,7 @@ function onKey(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
     select([])
     tool.value = 'select'
-    shapeOpen.value = emojiOpen.value = exportOpen.value = false
+    shapeOpen.value = emojiOpen.value = exportOpen.value = templatesOpen.value = false
     return
   }
   if (viewOnly.value) return
@@ -1343,6 +1361,38 @@ const firstConnector = computed(() => selectedObjects.value.find((o): o is Conne
           @click="redo"
         />
       </UidTooltip>
+      <span class="bd-sep" />
+      <UidTooltip
+        :content="L.templates"
+        placement="right"
+      >
+        <UidButton
+          size="sm"
+          :variant="templatesOpen ? 'secondary' : 'ghost'"
+          :icon="LayoutTemplate"
+          :aria-label="L.templates"
+          data-control="templates"
+          @click="templatesOpen = !templatesOpen"
+        />
+      </UidTooltip>
+    </div>
+    <div
+      v-if="templatesOpen && !viewOnly"
+      class="bd-panel bd-flyout bd-flyout--templates"
+      role="menu"
+    >
+      <button
+        v-for="t in templates"
+        :key="t.id"
+        type="button"
+        role="menuitem"
+        class="bd-template"
+        :data-template="t.id"
+        @click="addTemplate(t.id)"
+      >
+        <span class="bd-template__title">{{ t.title }}</span>
+        <span class="bd-template__desc">{{ t.description }}</span>
+      </button>
     </div>
     <div
       v-if="shapeOpen && tool === 'shape'"

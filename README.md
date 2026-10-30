@@ -33,6 +33,7 @@ use without Vue (model, geometry, undoable operations, SVG export).
 | Getting started | [en](docs/en/getting-started.md) | [ru](docs/ru/getting-started.md) | [de](docs/de/getting-started.md) | [zh](docs/zh/getting-started.md) |
 | Model | [en](docs/en/model.md) | [ru](docs/ru/model.md) | [de](docs/de/model.md) | [zh](docs/zh/model.md) |
 | Editor | [en](docs/en/editor.md) | [ru](docs/ru/editor.md) | [de](docs/de/editor.md) | [zh](docs/zh/editor.md) |
+| Workshop templates | [en](docs/en/templates.md) | [ru](docs/ru/templates.md) | [de](docs/de/templates.md) | [zh](docs/zh/templates.md) |
 | Collaboration | [en](docs/en/collaboration.md) | [ru](docs/ru/collaboration.md) | [de](docs/de/collaboration.md) | [zh](docs/zh/collaboration.md) |
 
 ## Install
